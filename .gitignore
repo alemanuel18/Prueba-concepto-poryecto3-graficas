@@ -1,2 +1,5 @@
-/target
-assets
+/target/
+/assets/*.zip
+/*.pdf
+/*.docx
+/media/*.ppm

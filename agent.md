@@ -21,3 +21,6 @@ Crear en Rust una simulación explorable de un sistema solar inspirado en Super 
 
 ## Criterios de implementación
 Mantener órbitas y cámara en una escena continua. Proteger rendimiento con detalle por distancia y descarte visible. Evitar guardar archivos de compilación o recursos temporales. Documentar claramente lo implementado y las limitaciones reales. No afirmar la existencia de un video ni enlace remoto que no se haya creado.
+
+## Implementación actual
+Pipeline Rust modular en `src/`; assets DAE/PNG convertidos a `assets/processed/` mediante `tools/convert_assets.py`. Cinco planetas, sol procedural, nave original, anillos, modo superficie, fondos por planeta, shaders CPU, z-buffer, LOD, descarte y video `media/galaxy-tour.mp4`. Los archivos ZIP originales se ignoran en Git; las mallas/cielos compactos sí están versionados. `README.md` contiene controles y créditos. No hay remoto Git ni nombres de integrantes confirmados; no inventarlos.
