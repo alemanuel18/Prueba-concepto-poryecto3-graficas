@@ -49,12 +49,7 @@ def xyz_array(src):
     return [floats[i:i+stride] for i in range(0,len(floats),stride)]
 
 SKIES = [
-    ('galaxy', 'Skyboxes - Galaxy Sky.zip', 'GalaxySkyGalaxy.png'),
-    ('yoshi_sky', 'Skyboxes - Galaxy Sky.zip', 'GalaxySkyUniverse.png'),
-    ('fluffy_sky', 'Skyboxes - Cloudy Sky.zip', 'PlanetCloud03.png'),
-    ('ice_sky', 'Skyboxes - Aurora Sky.zip', 'AuroraStar.png'),
-    ('lava_sky', 'Skyboxes - Melty Molten Sky.zip', 'PlanetGalaxy.png'),
-    ('fortress_sky', 'Skyboxes - Comet Observatory Dome Skies.zip', 'AstroDomeUniverse.png'),
+    ('galaxy', 'Skyboxes - Galaxy Sky.zip', 'GalaxySkyUniverse.png'),
     ('yoshi_surface', 'Skyboxes - Galaxy Sky.zip', 'GalaxySkyGalaxy.png'),
     ('fluffy_surface', 'Skyboxes - Cloudy Sky.zip', 'PlanetCloud03.png'),
     ('ice_surface', 'Skyboxes - Aurora Sky.zip', 'AuroraB.png'),
@@ -68,7 +63,7 @@ def export_skies():
         if not paths:continue
         with zipfile.ZipFile(paths[0]) as z:
             member=next(n for n in z.namelist() if os.path.basename(n)==file)
-            im=Image.open(io.BytesIO(z.read(member))).convert('RGB').resize((256,256))
+            im=Image.open(io.BytesIO(z.read(member))).convert('RGBA').resize((256,256))
             with open('assets/processed/'+name+'.sky','wb') as f:f.write(im.tobytes())
 
 def main():
@@ -80,7 +75,8 @@ def main():
             root = ET.fromstring(z.read(member))
             index = {e.get('id'):e for e in root.iter() if e.get('id')}
             up = root.find('.//{*}up_axis')
-            z_up = up is not None and up.text == 'Z_UP'
+            # These three files declare Z_UP but their vertices are already oriented Y-up.
+            z_up = up is not None and up.text == 'Z_UP' and name not in ('fluffy','fluffy_low','fortress_low')
             images = {}
             for e in root.findall('.//{*}image'):
                 ref=tag(e,'init_from')
