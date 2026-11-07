@@ -27,3 +27,6 @@ Pipeline Rust modular en `src/`; assets DAE/PNG convertidos a `assets/processed/
 
 ## Corrección posterior solicitada por el usuario
 No añadir esferas a los planetas: se usan solo las mallas DAE convertidas. La nave de vuelo es Starship Mario (`MarioFaceShipPlanet`) y su mini (`MiniPlayerRocket`) con cambio de cámara mediante `C`. El planeta escala suavemente hasta 1.55× al acercarse. Cada modo de exploración cercana fuerza un fondo propio extraído de los ZIP de skybox. Los objetos se apoyan en triángulos de las mallas originales. El sol sigue siendo procedural, lo que no contradice la instrucción sobre planetas.
+
+## Revisión más reciente
+El usuario corrigió la escala dinámica: los planetas mantienen radios visuales constantes de 10–13 unidades y órbitas de 55–298; solo la perspectiva los hace crecer al acercarse. Fluffy Bluff, Fluffy mini y Fortress mini requieren ignorar `Z_UP` del DAE porque sus vértices ya están orientados en Y. El modo de superficie ahora almacena posición local y normal de un triángulo real; cada paso se proyecta al punto más cercano de la malla. El fondo espacial es siempre GalaxySkyUniverse; los cinco fondos adicionales se componen sobre estrellas únicamente en Surface/Returning, con proporción 1:1 y alfa. El README y video deben reflejar esto. La sección anterior que hablaba de escala 1.55× y cámara en esfera queda obsoleta.

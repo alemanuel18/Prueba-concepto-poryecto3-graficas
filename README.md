@@ -20,8 +20,8 @@ La ventana inicia cerca de Yoshi Star. En equipos lentos, reducir `W` y `H` en `
 
 | Tecla | Vuelo espacial | Cerca de la superficie |
 | --- | --- | --- |
-| `W` / `S` | Acelerar / retroceder | Rodear el modelo hacia delante / atrás |
-| `A` / `D` | Desplazamiento lateral | Rodear el modelo lateralmente |
+| `W` / `S` | Acelerar / retroceder | Caminar adelante / atrás sobre la malla |
+| `A` / `D` | Desplazamiento lateral | Caminar lateralmente sobre la malla |
 | `←` / `→` | Girar la nave | Girar la vista |
 | `Espacio` / `Ctrl izquierdo` | Subir / bajar | — |
 | `Shift izquierdo` | Impulso rápido | — |
@@ -43,19 +43,21 @@ La ventana inicia cerca de Yoshi Star. En equipos lentos, reducir `W` y `H` en `
 | Volcano Sandwich | Relieve volcánico y géiseres | Lava animada y cielo rojizo |
 | Throwback Fortress | Fortaleza, bloques y cajas | Reflejos metálicos y cielo del observatorio |
 
-Los planetas se dibujan **solo con sus modelos originales**, sin esferas añadidas. Los objetos pequeños se distribuyen de forma determinista sobre triángulos de esas mallas y se orientan según la normal local. La posición de la distribución gira con cada planeta.
+Los planetas se dibujan **solo con sus modelos originales**, sin esferas añadidas. Fluffy Bluff y las versiones mini de Fluffy Bluff y Throwback Fortress tienen una corrección de orientación al importar. Los objetos pequeños se distribuyen de forma determinista sobre triángulos de esas mallas y se orientan según la normal local. La posición de la distribución gira con cada planeta.
 
 ## Implementación
 
 - `src/renderer.rs`: transformación de vértices, cámara, proyección en perspectiva, rasterización de triángulos, interpolación de color con corrección de perspectiva, z-buffer y shaders de fragmento en CPU. Raylib solo abre la ventana, recibe teclas, presenta el framebuffer y dibuja el HUD 2D.
 - `src/math.rs`: vectores y operaciones geométricas.
 - `src/asset.rs`: lector del formato de malla compacto y geometría procedural del sol.
-- `src/scene.rs`: parámetros de órbita, rotación, materiales y modos de exploración.
-- `src/controls.rs`: aceleración dependiente de `dt`, giro, desplazamiento, viajes rápidos y anillos.
+- `src/scene.rs`: parámetros de órbita y rotación, selección de piso y búsqueda del punto más cercano sobre los triángulos del modelo.
+- `src/controls.rs`: aceleración dependiente de `dt`, giro, desplazamiento, viajes rápidos y movimiento sobre el piso real de cada planeta.
 - `src/main.rs`: composición de la escena, fondos por planeta, niveles de detalle y generación del video.
 - `tools/convert_assets.py`: conversión opcional de los ZIP originales DAE/PNG a las mallas y cielos ya incluidos. Requiere Python, Pillow y lxml; los ZIP originales proporcionados para el proyecto deben estar en `assets/` para volver a ejecutar la conversión.
 
-El renderizador elige las versiones mini de cuatro planetas cuando están lejos. La cámara lejana usa la versión mini de Starship Mario; la cámara cercana usa el modelo grande. La escala visual de cada planeta crece suavemente hasta 1.55 veces al acercarse, además del aumento natural por perspectiva. El modo cercano emplea un fondo distinto para cada planeta. El contador de triángulos aparece abajo a la izquierda para comparar el trabajo cercano y lejano. Volcano Sandwich reutiliza su misma malla a distancia. También se descartan modelos situados detrás de la cámara o más allá del límite del sistema. Los shaders CPU del sol, agua, hielo, lava, metal y anillos usan cálculos diferentes; los del sol, agua, lava y anillo cambian con el tiempo.
+Cada planeta mantiene su tamaño fijo: sus radios visuales están entre 10 y 13 unidades y sus órbitas entre 55 y 298 unidades. Se ve mayor al acercarse **solo por perspectiva**. El renderizador elige las versiones mini de cuatro planetas cuando están lejos; Volcano Sandwich reutiliza su malla. La cámara lejana usa la versión mini de Starship Mario y la cercana usa el modelo grande. En vuelo espacial siempre se muestra el mismo campo estelar. Al usar un anillo aparece el fondo propio del planeta, compuesto con las texturas originales sin deformar su proporción y respetando su transparencia.
+
+La exploración de superficie parte de un triángulo de piso del modelo. Cada paso busca el punto más próximo en la malla; la altura y la normal de la cámara siguen ese piso, en vez de imponer un radio esférico. El contador de triángulos aparece abajo a la izquierda para comparar el trabajo cercano y lejano. También se descartan modelos situados detrás de la cámara o más allá del límite del sistema. Los shaders CPU del sol, agua, hielo, lava, metal y anillos usan cálculos diferentes; los del sol, agua, lava y anillo cambian con el tiempo.
 
 Opciones para reproducir material de la entrega:
 
