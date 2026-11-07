@@ -18,7 +18,7 @@ pub fn update(
     {
         if rl.is_key_pressed(*key) {
             let p = planets[i].position(time);
-            ship.pos = p + Vec3::new(planets[i].radius + 6.5, 1.3, 0.0);
+            ship.pos = p + Vec3::new(planets[i].radius * 1.55 + 4.0, 1.3, 0.0);
             ship.yaw = -std::f32::consts::FRAC_PI_2;
             ship.speed = 0.0;
             *mode = Mode::Space
@@ -26,6 +26,9 @@ pub fn update(
     }
     match mode {
         Mode::Space => {
+            if rl.is_key_pressed(KEY_C) {
+                ship.camera_far = !ship.camera_far;
+            }
             let turn = (rl.is_key_down(KEY_RIGHT) as i32 - rl.is_key_down(KEY_LEFT) as i32) as f32;
             ship.yaw += turn * 1.7 * dt;
             let thrust = (rl.is_key_down(KEY_W) as i32 - rl.is_key_down(KEY_S) as i32) as f32;
@@ -45,7 +48,7 @@ pub fn update(
                 * dt;
             for p in planets {
                 let delta = ship.pos - p.position(time);
-                let min = p.radius + 0.8;
+                let min = p.radius * 1.55 + 0.8;
                 if delta.len() < min {
                     ship.pos = p.position(time) + delta.norm() * min;
                     ship.speed = 0.0
@@ -53,12 +56,13 @@ pub fn update(
             }
             if rl.is_key_pressed(KEY_E) {
                 if let Some((i, _)) = planets.iter().enumerate().find(|(_, p)| {
-                    (ship.pos - (p.position(time) + Vec3::new(p.radius + 1.2, 0.0, 0.0))).len()
+                    (ship.pos - (p.position(time) + Vec3::new(p.radius * 1.55 + 1.2, 0.0, 0.0)))
+                        .len()
                         < 5.0
                 }) {
                     *mode = Mode::Surface {
                         planet: i,
-                        radial: Vec3::new(1.0, 0.0, 0.0),
+                        radial: Vec3::new(0.0, 1.0, 0.0),
                         yaw: 0.0,
                     };
                     ship.speed = 0.0
@@ -101,7 +105,7 @@ pub fn update(
             *remaining -= dt;
             if *remaining <= 0.0 {
                 let p = planets[*planet].position(time);
-                ship.pos = p + *radial * (planets[*planet].radius + 2.5);
+                ship.pos = p + *radial * (planets[*planet].radius * 1.55 + 2.5);
                 ship.yaw = radial.x.atan2(-radial.z);
                 ship.speed = 0.0;
                 *mode = Mode::Space;

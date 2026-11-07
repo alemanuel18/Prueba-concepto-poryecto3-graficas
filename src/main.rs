@@ -28,6 +28,8 @@ fn main() {
         "geyser",
         "crate",
         "falling_crate",
+        "starship",
+        "starship_low",
     ];
     let mut meshes: HashMap<&str, Mesh> = names
         .into_iter()
@@ -41,12 +43,6 @@ fn main() {
         })
         .collect();
     meshes.insert("sun", Mesh::sphere());
-    meshes.insert("ship", Mesh::ship());
-    meshes.insert("grass_core", Mesh::sphere_colored([53, 143, 66]));
-    meshes.insert("water_core", Mesh::sphere_colored([28, 110, 177]));
-    meshes.insert("ice_core", Mesh::sphere_colored([130, 205, 231]));
-    meshes.insert("lava_core", Mesh::sphere_colored([153, 52, 29]));
-    meshes.insert("metal_core", Mesh::sphere_colored([111, 132, 151]));
     let skies: HashMap<&str, Vec<u8>> = [
         "galaxy",
         "yoshi_sky",
@@ -54,6 +50,11 @@ fn main() {
         "ice_sky",
         "lava_sky",
         "fortress_sky",
+        "yoshi_surface",
+        "fluffy_surface",
+        "ice_surface",
+        "lava_surface",
+        "fortress_surface",
     ]
     .into_iter()
     .map(|n| {
@@ -64,27 +65,51 @@ fn main() {
     })
     .collect();
     let planets = scene::planets();
+    let decorations: Vec<_> = planets
+        .iter()
+        .enumerate()
+        .map(|(i, p)| scene::surface_placements(&meshes[p.mesh], 0xCAFE_2026 + i as u32))
+        .collect();
     let mut ship = Ship {
         pos: Vec3::new(24.0, 1.5, 0.0),
         yaw: -std::f32::consts::FRAC_PI_2,
         speed: 0.0,
+        camera_far: false,
     };
     let mut mode = Mode::Space;
     let mut renderer = Renderer::new();
     let mut time = 0.0f32;
     if std::env::args().any(|a| a == "--render-video") {
-        render_video(&mut renderer, &meshes, &skies, &planets);
+        render_video(&mut renderer, &meshes, &skies, &planets, &decorations);
         return;
     }
-    if std::env::args().any(|a| a == "--snapshot-surface") {
+    if std::env::args().any(|a| a == "--snapshot-far") {
+        ship.camera_far = true;
+    }
+    if let Some(surface_arg) = std::env::args().find(|a| a.starts_with("--snapshot-surface")) {
+        let planet = surface_arg
+            .split('=')
+            .nth(1)
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(0)
+            .min(planets.len() - 1);
         mode = Mode::Surface {
-            planet: 0,
-            radial: Vec3::new(1.0, 0.0, 0.0),
+            planet,
+            radial: Vec3::new(0.0, 1.0, 0.0),
             yaw: 0.0,
         };
     }
     if std::env::args().any(|a| a.starts_with("--snapshot")) {
-        render_frame(&mut renderer, &meshes, &skies, &planets, &ship, mode, 0.0);
+        render_frame(
+            &mut renderer,
+            &meshes,
+            &skies,
+            &planets,
+            &decorations,
+            &ship,
+            mode,
+            0.0,
+        );
         let mut ppm = format!("P6\n{} {}\n255\n", W, H).into_bytes();
         for px in renderer.pixels.chunks_exact(4) {
             ppm.extend_from_slice(&px[..3]);
@@ -109,7 +134,16 @@ fn main() {
         let dt = rl.get_frame_time().min(0.05);
         time += dt;
         controls::update(&rl, dt, time, &planets, &mut ship, &mut mode);
-        render_frame(&mut renderer, &meshes, &skies, &planets, &ship, mode, time);
+        render_frame(
+            &mut renderer,
+            &meshes,
+            &skies,
+            &planets,
+            &decorations,
+            &ship,
+            mode,
+            time,
+        );
         texture
             .update_texture(&renderer.pixels)
             .expect("upload framebuffer");
@@ -138,7 +172,7 @@ fn main() {
                     Color::RAYWHITE,
                 );
                 d.draw_text(
-                    "Shift impulso  1-5 viajar  E anillo estelar cercano",
+                    "Shift impulso  C camara lejana  1-5 viajar  E anillo",
                     22,
                     69,
                     15,
@@ -148,7 +182,7 @@ fn main() {
             Mode::Surface { planet, .. } => {
                 d.draw_text(
                     &format!(
-                        "Explorando {}  |  W/S/A/D caminar  Flechas girar",
+                        "Explorando {}  |  W/S/A/D rodear  Flechas orientar",
                         planets[planet].name
                     ),
                     22,
@@ -193,6 +227,7 @@ fn render_frame(
     meshes: &HashMap<&str, Mesh>,
     skies: &HashMap<&str, Vec<u8>>,
     planets: &[scene::Planet],
+    decorations: &[Vec<scene::Placement>],
     ship: &Ship,
     mode: Mode,
     time: f32,
@@ -201,7 +236,8 @@ fn render_frame(
         Mode::Space => {
             let f = ship.forward();
             Camera {
-                pos: ship.pos - f * 4.5 + Vec3::new(0.0, 3.0, 0.0),
+                pos: ship.pos - f * if ship.camera_far { 13.0 } else { 4.5 }
+                    + Vec3::new(0.0, if ship.camera_far { 5.0 } else { 3.0 }, 0.0),
                 target: ship.pos + f * 5.0,
                 up: Vec3::new(0.0, 1.0, 0.0),
             }
@@ -218,15 +254,16 @@ fn render_frame(
             ..
         } => {
             let p = planets[planet].position(time);
-            let eye = p + radial * (planets[planet].radius * 0.65);
+            let offset = [3.0, 3.0, 3.0, 5.0, 4.0][planet];
+            let eye = p + radial * (planets[planet].radius * 1.55 + offset);
             let north =
                 (Vec3::new(0.0, 0.0, -1.0) - radial * radial.dot(Vec3::new(0.0, 0.0, -1.0))).norm();
             let side = north.cross(radial).norm();
-            let dir = north * yaw.cos() + side * yaw.sin();
+            let tangent = north * yaw.cos() + side * yaw.sin();
             Camera {
                 pos: eye,
-                target: eye + dir * 4.0 - radial * 1.5,
-                up: radial,
+                target: p + tangent * (planets[planet].radius * 0.25),
+                up: Vec3::new(0.0, 1.0, -radial.y.abs().powf(4.0)),
             }
         }
     };
@@ -235,7 +272,9 @@ fn render_frame(
         .enumerate()
         .map(|(i, p)| (i, (p.position(time) - cam.pos).len()))
         .min_by(|a, b| a.1.total_cmp(&b.1));
-    let sky = if let Some((i, d)) = nearest {
+    let sky = if let Mode::Surface { planet, .. } | Mode::Returning { planet, .. } = mode {
+        Some(planet)
+    } else if let Some((i, d)) = nearest {
         if d < planets[i].radius + 18.0 {
             Some(i)
         } else {
@@ -244,12 +283,18 @@ fn render_frame(
     } else {
         None
     };
-    let key = match sky {
-        Some(0) => "yoshi_sky",
-        Some(1) => "fluffy_sky",
-        Some(2) => "ice_sky",
-        Some(3) => "lava_sky",
-        Some(4) => "fortress_sky",
+    let surface_sky = matches!(mode, Mode::Surface { .. } | Mode::Returning { .. });
+    let key = match (sky, surface_sky) {
+        (Some(0), true) => "yoshi_surface",
+        (Some(1), true) => "fluffy_surface",
+        (Some(2), true) => "ice_surface",
+        (Some(3), true) => "lava_surface",
+        (Some(4), true) => "fortress_surface",
+        (Some(0), _) => "yoshi_sky",
+        (Some(1), _) => "fluffy_sky",
+        (Some(2), _) => "ice_sky",
+        (Some(3), _) => "lava_sky",
+        (Some(4), _) => "fortress_sky",
         _ => "galaxy",
     };
     renderer.clear(time, cam, &skies[key], sky.map(|i| planets[i].surface));
@@ -278,43 +323,31 @@ fn render_frame(
         let dist = (position - cam.pos).len();
         let low = dist > 17.0;
         let mesh = if low { p.low } else { p.mesh };
-        let core = match p.surface {
-            Surface::Grass => "grass_core",
-            Surface::Water => "water_core",
-            Surface::Ice => "ice_core",
-            Surface::Lava => "lava_core",
-            Surface::Metal => "metal_core",
+        let scale_factor = if matches!(mode,Mode::Surface {planet: active,..} | Mode::Returning {planet: active,..} if active==i)
+        {
+            1.55
+        } else {
+            p.scale_at(dist)
         };
-        renderer.draw_mesh(
-            &meshes[core],
-            cam,
-            position,
-            p.radius * 0.55,
-            time * p.spin,
-            Shader::Planet(p.surface),
-            time,
-        );
-        if dist < 18.0 {
-            let props: &[&str] = match p.surface {
-                Surface::Grass => &["bush", "flower", "pipe"],
-                Surface::Water => &["fountain", "flower", "bush"],
-                Surface::Ice => &["crate", "pipe"],
-                Surface::Lava => &["geyser", "crate"],
-                Surface::Metal => &["falling_crate", "pipe", "crate"],
-            };
-            for j in 0..28 {
-                let fy = 1.0 - 2.0 * (j as f32 + 0.5) / 28.0;
-                let a = j as f32 * 2.3999632 + i as f32 * 0.79;
-                let r = (1.0 - fy * fy).sqrt();
-                let radial = Vec3::new(r * a.cos(), fy, r * a.sin()).rotate_y(time * p.spin);
-                let size = 0.12 + (j % 4) as f32 * 0.025;
-                let at = position + radial * (p.radius * 0.55 + size * 0.3);
+        let props: &[&str] = match p.surface {
+            Surface::Grass => &["bush", "flower", "pipe"],
+            Surface::Water => &["fountain", "flower", "bush"],
+            Surface::Ice => &["crate", "pipe"],
+            Surface::Lava => &["geyser", "crate"],
+            Surface::Metal => &["falling_crate", "pipe", "crate"],
+        };
+        if dist < 22.0 {
+            for (j, placement) in decorations[i].iter().enumerate() {
+                let radial = placement.normal.rotate_y(time * p.spin);
+                let at = position
+                    + placement.position.rotate_y(time * p.spin) * (p.radius * scale_factor)
+                    + radial * 0.05;
                 renderer.draw_mesh_oriented(
                     &meshes[props[j % props.len()]],
                     cam,
                     at,
-                    size,
-                    a,
+                    placement.size * scale_factor,
+                    j as f32 * 0.7,
                     radial,
                     Shader::Planet(p.surface),
                     time,
@@ -325,7 +358,7 @@ fn render_frame(
             &meshes[mesh],
             cam,
             position,
-            p.radius,
+            p.radius * scale_factor,
             time * p.spin,
             Shader::Planet(p.surface),
             time,
@@ -336,7 +369,7 @@ fn render_frame(
             renderer.draw_mesh(
                 &meshes["ring"],
                 cam,
-                position + Vec3::new(p.radius + 1.2, 0.0, 0.0),
+                position + Vec3::new(p.radius * scale_factor + 1.2, 0.0, 0.0),
                 0.75,
                 time * 1.6,
                 Shader::Ring,
@@ -370,10 +403,14 @@ fn render_frame(
     }
     if matches!(mode, Mode::Space) {
         renderer.draw_mesh(
-            &meshes["ship"],
+            &meshes[if ship.camera_far {
+                "starship_low"
+            } else {
+                "starship"
+            }],
             cam,
             ship.pos,
-            0.85,
+            1.0,
             ship.yaw,
             Shader::Ship,
             time,
@@ -386,6 +423,7 @@ fn render_video(
     meshes: &HashMap<&str, Mesh>,
     skies: &HashMap<&str, Vec<u8>>,
     planets: &[scene::Planet],
+    decorations: &[Vec<scene::Placement>],
 ) {
     use std::{
         io::Write,
@@ -431,12 +469,13 @@ fn render_video(
             let center = p.position(time);
             let (ship, mode) = if u >= 0.55 && u < 0.78 {
                 let a = (u - 0.55) / 0.23 * 0.75;
-                let radial = Vec3::new(a.cos(), 0.0, a.sin());
+                let radial = Vec3::new(a.sin() * 0.35, 0.93, a.cos() * 0.35).norm();
                 (
                     Ship {
                         pos: center + radial * (p.radius + 4.0),
                         yaw: 0.0,
                         speed: 0.0,
+                        camera_far: false,
                     },
                     Mode::Surface {
                         planet: i,
@@ -461,11 +500,21 @@ fn render_video(
                         pos,
                         yaw,
                         speed: 0.0,
+                        camera_far: u < 0.12,
                     },
                     Mode::Space,
                 )
             };
-            render_frame(renderer, meshes, skies, planets, &ship, mode, time);
+            render_frame(
+                renderer,
+                meshes,
+                skies,
+                planets,
+                decorations,
+                &ship,
+                mode,
+                time,
+            );
             for (idx, px) in renderer.pixels.chunks_exact(4).enumerate() {
                 frame[idx * 3..idx * 3 + 3].copy_from_slice(&px[..3]);
             }

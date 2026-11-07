@@ -1,4 +1,42 @@
-use crate::math::Vec3;
+use crate::{asset::Mesh, math::Vec3};
+#[derive(Clone, Copy)]
+pub struct Placement {
+    pub position: Vec3,
+    pub normal: Vec3,
+    pub size: f32,
+}
+pub fn surface_placements(mesh: &Mesh, seed: u32) -> Vec<Placement> {
+    let candidates: Vec<_> = mesh
+        .vertices
+        .chunks_exact(3)
+        .step_by(7)
+        .filter_map(|tri| {
+            let center = (tri[0].pos + tri[1].pos + tri[2].pos) * (1.0 / 3.0);
+            let mut normal = (tri[1].pos - tri[0].pos)
+                .cross(tri[2].pos - tri[0].pos)
+                .norm();
+            if normal.dot(center) < 0.0 {
+                normal = normal * -1.0;
+            }
+            (center.len() > 0.28 && normal.dot(center.norm()) > 0.45).then_some((center, normal))
+        })
+        .collect();
+    let mut state = seed;
+    (0..28)
+        .filter_map(|i| {
+            if candidates.is_empty() {
+                return None;
+            }
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let (position, normal) = candidates[state as usize % candidates.len()];
+            Some(Placement {
+                position,
+                normal,
+                size: 0.10 + (i % 4) as f32 * 0.025,
+            })
+        })
+        .collect()
+}
 #[derive(Clone, Copy, Debug)]
 pub enum Surface {
     Grass,
@@ -22,6 +60,11 @@ impl Planet {
     pub fn position(&self, t: f32) -> Vec3 {
         let a = self.phase + t * self.orbit_speed;
         Vec3::new(a.cos() * self.orbit, 0.0, a.sin() * self.orbit)
+    }
+    pub fn scale_at(&self, distance: f32) -> f32 {
+        let t = ((distance - (self.radius + 5.0)) / 18.0).clamp(0.0, 1.0);
+        let smooth = t * t * (3.0 - 2.0 * t);
+        1.0 + 0.55 * (1.0 - smooth)
     }
 }
 pub fn planets() -> Vec<Planet> {
@@ -87,6 +130,7 @@ pub struct Ship {
     pub pos: Vec3,
     pub yaw: f32,
     pub speed: f32,
+    pub camera_far: bool,
 }
 impl Ship {
     pub fn forward(&self) -> Vec3 {
@@ -107,4 +151,18 @@ pub enum Mode {
         yaw: f32,
         remaining: f32,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn planet_grows_smoothly_as_camera_approaches() {
+        let planet = &super::planets()[0];
+        let distant = planet.scale_at(50.0);
+        let middle = planet.scale_at(20.0);
+        let near = planet.scale_at(planet.radius + 5.0);
+        assert!((distant - 1.0).abs() < 1e-6);
+        assert!(distant < middle && middle < near);
+        assert!((near - 1.55).abs() < 1e-6);
+    }
 }
