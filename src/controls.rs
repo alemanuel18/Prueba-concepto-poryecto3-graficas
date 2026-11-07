@@ -77,11 +77,11 @@ pub fn update(
             let north = (Vec3::new(0.0, 0.0, -1.0)
                 - *radial * radial.dot(Vec3::new(0.0, 0.0, -1.0)))
             .norm();
-            let side = radial.cross(north).norm();
+            let side = north.cross(*radial).norm();
             let f = north * yaw.cos() + side * yaw.sin();
             let step = (rl.is_key_down(KEY_W) as i32 - rl.is_key_down(KEY_S) as i32) as f32;
             let strafe = (rl.is_key_down(KEY_D) as i32 - rl.is_key_down(KEY_A) as i32) as f32;
-            *radial = (*radial + (f * step + side * strafe) * dt * 0.45).norm();
+            *radial = (*radial + (f * step + f.cross(*radial).norm() * strafe) * dt * 0.45).norm();
             if rl.is_key_pressed(KEY_R) {
                 *mode = Mode::Returning {
                     planet: *planet,
@@ -102,6 +102,7 @@ pub fn update(
             if *remaining <= 0.0 {
                 let p = planets[*planet].position(time);
                 ship.pos = p + *radial * (planets[*planet].radius + 2.5);
+                ship.yaw = radial.x.atan2(-radial.z);
                 ship.speed = 0.0;
                 *mode = Mode::Space;
             }

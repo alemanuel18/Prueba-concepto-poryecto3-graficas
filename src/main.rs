@@ -221,7 +221,7 @@ fn render_frame(
             let eye = p + radial * (planets[planet].radius * 0.65);
             let north =
                 (Vec3::new(0.0, 0.0, -1.0) - radial * radial.dot(Vec3::new(0.0, 0.0, -1.0))).norm();
-            let side = radial.cross(north).norm();
+            let side = north.cross(radial).norm();
             let dir = north * yaw.cos() + side * yaw.sin();
             Camera {
                 pos: eye,
