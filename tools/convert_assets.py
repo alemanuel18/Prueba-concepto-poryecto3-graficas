@@ -14,6 +14,8 @@ from PIL import Image
 
 SPECS = [
     ('ring', 'Objects - Launch Star.zip', 'Launch Star/SuperSpinDriver.dae'),
+    ('starship', 'Starship Mario Exterior.zip', 'Starship Mario Outside/MarioFaceShipPlanet.dae'),
+    ('starship_low', 'Mini Starship Mario.zip', 'Mini Starship Mario/MiniPlayerRocket.dae'),
     ('yoshi', 'Yoshi Star Starting Planet.zip', 'Start Planet/YoshiCaughtPlanet.dae'),
     ('fluffy', 'Fluffy Bluff Valley Planet.zip', 'CloudAcrossValleyPlanet.dae'),
     ('ice', 'Freezeflame Mountain Planet.zip', 'Mountain Planet/IceMountainPlanet.dae'),
@@ -53,6 +55,11 @@ SKIES = [
     ('ice_sky', 'Skyboxes - Aurora Sky.zip', 'AuroraStar.png'),
     ('lava_sky', 'Skyboxes - Melty Molten Sky.zip', 'PlanetGalaxy.png'),
     ('fortress_sky', 'Skyboxes - Comet Observatory Dome Skies.zip', 'AstroDomeUniverse.png'),
+    ('yoshi_surface', 'Skyboxes - Galaxy Sky.zip', 'GalaxySkyGalaxy.png'),
+    ('fluffy_surface', 'Skyboxes - Cloudy Sky.zip', 'PlanetCloud03.png'),
+    ('ice_surface', 'Skyboxes - Aurora Sky.zip', 'AuroraB.png'),
+    ('lava_surface', 'Skyboxes - Melty Molten Sky.zip', 'LavaSun.png'),
+    ('fortress_surface', 'Skyboxes - Comet Observatory Dome Skies.zip', 'AstroDomeGalaxy.png'),
 ]
 
 def export_skies():
@@ -60,7 +67,7 @@ def export_skies():
         paths=glob.glob('assets/*'+key)
         if not paths:continue
         with zipfile.ZipFile(paths[0]) as z:
-            member=next(n for n in z.namelist() if n.endswith(file))
+            member=next(n for n in z.namelist() if os.path.basename(n)==file)
             im=Image.open(io.BytesIO(z.read(member))).convert('RGB').resize((256,256))
             with open('assets/processed/'+name+'.sky','wb') as f:f.write(im.tobytes())
 
