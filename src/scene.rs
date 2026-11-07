@@ -5,6 +5,139 @@ pub struct Placement {
     pub normal: Vec3,
     pub size: f32,
 }
+#[derive(Clone, Copy, Debug)]
+pub struct SurfacePoint {
+    pub position: Vec3,
+    pub normal: Vec3,
+}
+
+pub fn surface_forward(local: Vec3, normal: Vec3) -> Vec3 {
+    let toward_center = local * -1.0;
+    let flat = toward_center - normal * toward_center.dot(normal);
+    if flat.len() > 0.08 {
+        return flat.norm();
+    }
+    let base = if normal.z.abs() > 0.9 {
+        Vec3::new(1.0, 0.0, 0.0)
+    } else {
+        Vec3::new(0.0, 0.0, -1.0)
+    };
+    (base - normal * base.dot(normal)).norm()
+}
+
+pub fn landing_point(mesh: &Mesh, kind: Surface) -> SurfacePoint {
+    let mut best = None;
+    let mut best_score = f32::NEG_INFINITY;
+    for tri in mesh.vertices.chunks_exact(3) {
+        let a = tri[0].pos;
+        let b = tri[1].pos;
+        let c = tri[2].pos;
+        let cross = (b - a).cross(c - a);
+        let area = cross.len();
+        if area < 1e-7 {
+            continue;
+        }
+        let mut normal = cross * (1.0 / area);
+        if normal.y < 0.0 {
+            normal = normal * -1.0;
+        }
+        let position = (a + b + c) * (1.0 / 3.0);
+        if normal.y < 0.65 || position.y < -0.4 {
+            continue;
+        }
+        let horizontal = (position.x * position.x + position.z * position.z).sqrt();
+        let score = if matches!(kind,Surface::Grass) {
+            let rgb=[0,1,2].map(|k| (tri[0].color[k] as f32+tri[1].color[k] as f32+tri[2].color[k] as f32)/3.0);
+            if rgb[1]<rgb[0]*1.2 || rgb[1]<rgb[2]*1.1 {continue}
+            area/(0.08+horizontal).powi(2)
+        } else if matches!(kind, Surface::Ice | Surface::Metal) {
+            if position.y < 0.1 || normal.y < 0.75 {
+                continue;
+            }
+            area.sqrt() * (0.5 + 3.0 * position.y) * (0.5 + horizontal)
+        } else {
+            area / (0.3 + horizontal) * (0.8 + position.y.max(0.0))
+        };
+        if score > best_score {
+            best_score = score;
+            best = Some(SurfacePoint { position, normal });
+        }
+    }
+    best.unwrap_or(SurfacePoint {
+        position: Vec3::new(0.0, 0.5, 0.0),
+        normal: Vec3::new(0.0, 1.0, 0.0),
+    })
+}
+
+fn closest_point_on_triangle(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
+    let ab = b - a;
+    let ac = c - a;
+    let ap = p - a;
+    let d1 = ab.dot(ap);
+    let d2 = ac.dot(ap);
+    if d1 <= 0.0 && d2 <= 0.0 {
+        return a;
+    }
+    let bp = p - b;
+    let d3 = ab.dot(bp);
+    let d4 = ac.dot(bp);
+    if d3 >= 0.0 && d4 <= d3 {
+        return b;
+    }
+    let vc = d1 * d4 - d3 * d2;
+    if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
+        return a + ab * (d1 / (d1 - d3));
+    }
+    let cp = p - c;
+    let d5 = ab.dot(cp);
+    let d6 = ac.dot(cp);
+    if d6 >= 0.0 && d5 <= d6 {
+        return c;
+    }
+    let vb = d5 * d2 - d1 * d6;
+    if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
+        return a + ac * (d2 / (d2 - d6));
+    }
+    let va = d3 * d6 - d5 * d4;
+    if va <= 0.0 && d4 - d3 >= 0.0 && d5 - d6 >= 0.0 {
+        return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
+    }
+    a + ab * (vb / (va + vb + vc)) + ac * (vc / (va + vb + vc))
+}
+
+pub fn closest_floor(
+    mesh: &Mesh,
+    query: Vec3,
+    previous_normal: Vec3,
+    max_distance: f32,
+) -> Option<SurfacePoint> {
+    let mut best = None;
+    let mut best_d2 = max_distance * max_distance;
+    for tri in mesh.vertices.chunks_exact(3) {
+        let a = tri[0].pos;
+        let b = tri[1].pos;
+        let c = tri[2].pos;
+        let cross = (b - a).cross(c - a);
+        let length = cross.len();
+        if length < 1e-7 {
+            continue;
+        }
+        let mut normal = cross * (1.0 / length);
+        if normal.dot(previous_normal) < 0.0 {
+            normal = normal * -1.0;
+        }
+        if normal.dot(previous_normal) < 0.45 {
+            continue;
+        }
+        let position = closest_point_on_triangle(query, a, b, c);
+        let d2 = (position - query).dot(position - query);
+        if d2 < best_d2 {
+            best_d2 = d2;
+            best = Some(SurfacePoint { position, normal });
+        }
+    }
+    best
+}
 pub fn surface_placements(mesh: &Mesh, seed: u32) -> Vec<Placement> {
     let candidates: Vec<_> = mesh
         .vertices
@@ -61,11 +194,6 @@ impl Planet {
         let a = self.phase + t * self.orbit_speed;
         Vec3::new(a.cos() * self.orbit, 0.0, a.sin() * self.orbit)
     }
-    pub fn scale_at(&self, distance: f32) -> f32 {
-        let t = ((distance - (self.radius + 5.0)) / 18.0).clamp(0.0, 1.0);
-        let smooth = t * t * (3.0 - 2.0 * t);
-        1.0 + 0.55 * (1.0 - smooth)
-    }
 }
 pub fn planets() -> Vec<Planet> {
     vec![
@@ -74,9 +202,9 @@ pub fn planets() -> Vec<Planet> {
             mesh: "yoshi",
             low: "yoshi_low",
             surface: Surface::Grass,
-            radius: 3.5,
-            orbit: 16.0,
-            orbit_speed: 0.055,
+            radius: 10.0,
+            orbit: 55.0,
+            orbit_speed: 0.021,
             spin: 0.22,
             phase: 0.0,
         },
@@ -85,9 +213,9 @@ pub fn planets() -> Vec<Planet> {
             mesh: "fluffy",
             low: "fluffy_low",
             surface: Surface::Water,
-            radius: 3.8,
-            orbit: 27.0,
-            orbit_speed: 0.038,
+            radius: 12.0,
+            orbit: 112.0,
+            orbit_speed: 0.012,
             spin: 0.17,
             phase: 1.2,
         },
@@ -96,9 +224,9 @@ pub fn planets() -> Vec<Planet> {
             mesh: "ice",
             low: "ice_low",
             surface: Surface::Ice,
-            radius: 3.7,
-            orbit: 38.0,
-            orbit_speed: 0.026,
+            radius: 11.0,
+            orbit: 170.0,
+            orbit_speed: 0.008,
             spin: 0.16,
             phase: 2.4,
         },
@@ -107,9 +235,9 @@ pub fn planets() -> Vec<Planet> {
             mesh: "lava",
             low: "lava",
             surface: Surface::Lava,
-            radius: 4.0,
-            orbit: 49.0,
-            orbit_speed: 0.019,
+            radius: 13.0,
+            orbit: 232.0,
+            orbit_speed: 0.006,
             spin: 0.13,
             phase: 3.5,
         },
@@ -118,9 +246,9 @@ pub fn planets() -> Vec<Planet> {
             mesh: "fortress",
             low: "fortress_low",
             surface: Surface::Metal,
-            radius: 4.0,
-            orbit: 60.0,
-            orbit_speed: 0.014,
+            radius: 12.0,
+            orbit: 298.0,
+            orbit_speed: 0.004,
             spin: 0.12,
             phase: 4.6,
         },
@@ -142,12 +270,14 @@ pub enum Mode {
     Space,
     Surface {
         planet: usize,
-        radial: Vec3,
+        local: Vec3,
+        normal: Vec3,
         yaw: f32,
     },
     Returning {
         planet: usize,
-        radial: Vec3,
+        local: Vec3,
+        normal: Vec3,
         yaw: f32,
         remaining: f32,
     },
@@ -155,14 +285,46 @@ pub enum Mode {
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        asset::{Mesh, Vertex},
+        math::Vec3,
+    };
     #[test]
-    fn planet_grows_smoothly_as_camera_approaches() {
-        let planet = &super::planets()[0];
-        let distant = planet.scale_at(50.0);
-        let middle = planet.scale_at(20.0);
-        let near = planet.scale_at(planet.radius + 5.0);
-        assert!((distant - 1.0).abs() < 1e-6);
-        assert!(distant < middle && middle < near);
-        assert!((near - 1.55).abs() < 1e-6);
+    fn planet_scale_is_constant_at_every_distance() {
+        let planets = super::planets();
+        assert_eq!(planets[0].radius, 10.0);
+        assert!(
+            planets
+                .windows(2)
+                .all(|pair| pair[1].orbit - pair[0].orbit > pair[0].radius + pair[1].radius)
+        );
+    }
+    #[test]
+    fn floor_follows_mesh_triangle_instead_of_fixed_radius() {
+        let mesh = Mesh {
+            vertices: vec![
+                Vertex {
+                    pos: Vec3::new(0.0, 0.0, 0.0),
+                    color: [0; 3],
+                },
+                Vertex {
+                    pos: Vec3::new(1.0, 1.0, 0.0),
+                    color: [0; 3],
+                },
+                Vertex {
+                    pos: Vec3::new(0.0, 0.0, 1.0),
+                    color: [0; 3],
+                },
+            ],
+        };
+        let hit = super::closest_floor(
+            &mesh,
+            Vec3::new(0.5, 0.55, 0.2),
+            Vec3::new(-0.7, 0.7, 0.0),
+            0.2,
+        )
+        .unwrap();
+        assert!((hit.position.y - 0.5).abs() < 0.04);
+        assert!(hit.normal.y > 0.6 && hit.normal.x < -0.6);
     }
 }

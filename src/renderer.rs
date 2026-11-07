@@ -36,7 +36,14 @@ impl Renderer {
             culled: 0,
         }
     }
-    pub fn clear(&mut self, time: f32, cam: Camera, sky: &[u8], kind: Option<Surface>) {
+    pub fn clear(
+        &mut self,
+        _time: f32,
+        cam: Camera,
+        stars: &[u8],
+        overlay: Option<&[u8]>,
+        kind: Option<Surface>,
+    ) {
         self.depth.fill(f32::INFINITY);
         self.triangles = 0;
         self.culled = 0;
@@ -53,15 +60,31 @@ impl Renderer {
         };
         for y in 0..H {
             for x in 0..W {
-                let u = ((x * 256 / W) as i32 + shift).rem_euclid(256) as usize;
-                let v = (y * 256 / H + ((time * 0.3) as usize)) % 256;
-                let si = (v * 256 + u) * 3;
+                // One source pixel spans two framebuffer pixels in both axes.
+                // These square sky textures keep their proportions rather than filling the screen.
+                let u = ((x as i32 / 2) + shift).rem_euclid(256) as usize;
+                let v = ((y as i32 - H as i32 / 2) / 2 + 128).clamp(0, 255) as usize;
+                let si = (v * 256 + u) * 4;
                 let i = (y * W + x) * 4;
                 let haze = (1.0 - (y as f32 / H as f32 - 0.5).abs() * 2.0).max(0.0);
                 for k in 0..3 {
-                    self.pixels[i + k] =
-                        (base[k] + haze * base[k] * 0.65 + sky[si + k] as f32 * 0.42).min(255.0)
-                            as u8;
+                    let mut value = base[k] + haze * base[k] * 0.45 + stars[si + k] as f32 * 0.65;
+                    if let Some(layer) = overlay {
+                        let brightness =
+                            layer[si..si + 3].iter().copied().max().unwrap_or(0) as f32 / 255.0;
+                        let alpha = layer[si + 3] as f32 / 255.0;
+                        let blend = match kind {
+                            Some(Surface::Lava) => {
+                                let dx = (x as f32 - W as f32 * 0.72) / (W as f32 * 0.38);
+                                let dy = (y as f32 - H as f32 * 0.32) / (H as f32 * 0.62);
+                                (1.0 - dx * dx - dy * dy).clamp(0.0, 1.0) * 0.72
+                            }
+                            Some(Surface::Water) => alpha * 0.75,
+                            _ => brightness * 0.8,
+                        };
+                        value = value * (1.0 - blend) + layer[si + k] as f32 * blend;
+                    }
+                    self.pixels[i + k] = value.clamp(0.0, 255.0) as u8;
                 }
                 self.pixels[i + 3] = 255;
             }
@@ -127,7 +150,7 @@ impl Renderer {
         let forward = right.cross(up).norm();
         let b = Self::basis(cam);
         let dist = (center - cam.pos).len();
-        if dist > 180.0 || (center - cam.pos).dot(b.2) < -scale {
+        if dist > 500.0 || (center - cam.pos).dot(b.2) < -scale {
             self.culled += mesh.vertices.len() as u32 / 3;
             return;
         }

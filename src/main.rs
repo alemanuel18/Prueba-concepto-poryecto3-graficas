@@ -45,11 +45,6 @@ fn main() {
     meshes.insert("sun", Mesh::sphere());
     let skies: HashMap<&str, Vec<u8>> = [
         "galaxy",
-        "yoshi_sky",
-        "fluffy_sky",
-        "ice_sky",
-        "lava_sky",
-        "fortress_sky",
         "yoshi_surface",
         "fluffy_surface",
         "ice_surface",
@@ -65,13 +60,17 @@ fn main() {
     })
     .collect();
     let planets = scene::planets();
+    let landings: Vec<_> = planets
+        .iter()
+        .map(|p| scene::landing_point(&meshes[p.mesh], p.surface))
+        .collect();
     let decorations: Vec<_> = planets
         .iter()
         .enumerate()
         .map(|(i, p)| scene::surface_placements(&meshes[p.mesh], 0xCAFE_2026 + i as u32))
         .collect();
     let mut ship = Ship {
-        pos: Vec3::new(24.0, 1.5, 0.0),
+        pos: planets[0].position(0.0) + Vec3::new(planets[0].radius + 6.0, 2.0, 0.0),
         yaw: -std::f32::consts::FRAC_PI_2,
         speed: 0.0,
         camera_far: false,
@@ -80,7 +79,14 @@ fn main() {
     let mut renderer = Renderer::new();
     let mut time = 0.0f32;
     if std::env::args().any(|a| a == "--render-video") {
-        render_video(&mut renderer, &meshes, &skies, &planets, &decorations);
+        render_video(
+            &mut renderer,
+            &meshes,
+            &skies,
+            &planets,
+            &decorations,
+            &landings,
+        );
         return;
     }
     if std::env::args().any(|a| a == "--snapshot-far") {
@@ -95,7 +101,8 @@ fn main() {
             .min(planets.len() - 1);
         mode = Mode::Surface {
             planet,
-            radial: Vec3::new(0.0, 1.0, 0.0),
+            local: landings[planet].position + landings[planet].normal * 0.015,
+            normal: landings[planet].normal,
             yaw: 0.0,
         };
     }
@@ -133,7 +140,9 @@ fn main() {
     while !rl.window_should_close() {
         let dt = rl.get_frame_time().min(0.05);
         time += dt;
-        controls::update(&rl, dt, time, &planets, &mut ship, &mut mode);
+        controls::update(
+            &rl, dt, time, &planets, &meshes, &landings, &mut ship, &mut mode,
+        );
         render_frame(
             &mut renderer,
             &meshes,
@@ -182,7 +191,7 @@ fn main() {
             Mode::Surface { planet, .. } => {
                 d.draw_text(
                     &format!(
-                        "Explorando {}  |  W/S/A/D rodear  Flechas orientar",
+                        "Explorando {}  |  W/S/A/D caminar  Flechas orientar",
                         planets[planet].name
                     ),
                     22,
@@ -244,60 +253,58 @@ fn render_frame(
         }
         Mode::Surface {
             planet,
-            radial,
+            local,
+            normal,
             yaw,
         }
         | Mode::Returning {
             planet,
-            radial,
+            local,
+            normal,
             yaw,
             ..
         } => {
-            let p = planets[planet].position(time);
-            let offset = [3.0, 3.0, 3.0, 5.0, 4.0][planet];
-            let eye = p + radial * (planets[planet].radius * 1.55 + offset);
-            let north =
-                (Vec3::new(0.0, 0.0, -1.0) - radial * radial.dot(Vec3::new(0.0, 0.0, -1.0))).norm();
-            let side = north.cross(radial).norm();
-            let tangent = north * yaw.cos() + side * yaw.sin();
+            let p = &planets[planet];
+            let rotation = time * p.spin;
+            let floor = p.position(time) + local.rotate_y(rotation) * p.radius;
+            let up = normal.rotate_y(rotation).norm();
+            let north = scene::surface_forward(local, normal);
+            let side = north.cross(normal).norm();
+            let forward = (north * yaw.cos() + side * yaw.sin()).rotate_y(rotation);
+            let eye = floor + up * (p.radius * 0.35);
+            let look_ahead = if matches!(p.surface, Surface::Lava) {
+                0.12
+            } else {
+                0.35
+            };
             Camera {
                 pos: eye,
-                target: p + tangent * (planets[planet].radius * 0.25),
-                up: Vec3::new(0.0, 1.0, -radial.y.abs().powf(4.0)),
+                target: floor + forward * (p.radius * look_ahead),
+                up,
             }
         }
     };
-    let nearest = planets
-        .iter()
-        .enumerate()
-        .map(|(i, p)| (i, (p.position(time) - cam.pos).len()))
-        .min_by(|a, b| a.1.total_cmp(&b.1));
-    let sky = if let Mode::Surface { planet, .. } | Mode::Returning { planet, .. } = mode {
-        Some(planet)
-    } else if let Some((i, d)) = nearest {
-        if d < planets[i].radius + 18.0 {
-            Some(i)
-        } else {
-            None
-        }
-    } else {
-        None
+    let surface_planet = match mode {
+        Mode::Surface { planet, .. } | Mode::Returning { planet, .. } => Some(planet),
+        Mode::Space => None,
     };
-    let surface_sky = matches!(mode, Mode::Surface { .. } | Mode::Returning { .. });
-    let key = match (sky, surface_sky) {
-        (Some(0), true) => "yoshi_surface",
-        (Some(1), true) => "fluffy_surface",
-        (Some(2), true) => "ice_surface",
-        (Some(3), true) => "lava_surface",
-        (Some(4), true) => "fortress_surface",
-        (Some(0), _) => "yoshi_sky",
-        (Some(1), _) => "fluffy_sky",
-        (Some(2), _) => "ice_sky",
-        (Some(3), _) => "lava_sky",
-        (Some(4), _) => "fortress_sky",
-        _ => "galaxy",
-    };
-    renderer.clear(time, cam, &skies[key], sky.map(|i| planets[i].surface));
+    let overlay = surface_planet.map(|i| {
+        let name = [
+            "yoshi_surface",
+            "fluffy_surface",
+            "ice_surface",
+            "lava_surface",
+            "fortress_surface",
+        ][i];
+        skies[name].as_slice()
+    });
+    renderer.clear(
+        time,
+        cam,
+        &skies["galaxy"],
+        overlay,
+        surface_planet.map(|i| planets[i].surface),
+    );
     for p in planets {
         let mut last = None;
         for i in 0..=90 {
@@ -313,7 +320,7 @@ fn render_frame(
         &meshes["sun"],
         cam,
         Vec3::new(0.0, 0.0, 0.0),
-        4.0,
+        13.0,
         time * 0.2,
         Shader::Sun,
         time,
@@ -321,14 +328,8 @@ fn render_frame(
     for (i, p) in planets.iter().enumerate() {
         let position = p.position(time);
         let dist = (position - cam.pos).len();
-        let low = dist > 17.0;
+        let low = dist > p.radius * 3.0;
         let mesh = if low { p.low } else { p.mesh };
-        let scale_factor = if matches!(mode,Mode::Surface {planet: active,..} | Mode::Returning {planet: active,..} if active==i)
-        {
-            1.55
-        } else {
-            p.scale_at(dist)
-        };
         let props: &[&str] = match p.surface {
             Surface::Grass => &["bush", "flower", "pipe"],
             Surface::Water => &["fountain", "flower", "bush"],
@@ -336,17 +337,17 @@ fn render_frame(
             Surface::Lava => &["geyser", "crate"],
             Surface::Metal => &["falling_crate", "pipe", "crate"],
         };
-        if dist < 22.0 {
+        if dist < p.radius * 2.3 {
             for (j, placement) in decorations[i].iter().enumerate() {
                 let radial = placement.normal.rotate_y(time * p.spin);
                 let at = position
-                    + placement.position.rotate_y(time * p.spin) * (p.radius * scale_factor)
+                    + placement.position.rotate_y(time * p.spin) * p.radius
                     + radial * 0.05;
                 renderer.draw_mesh_oriented(
                     &meshes[props[j % props.len()]],
                     cam,
                     at,
-                    placement.size * scale_factor,
+                    placement.size * p.radius * 0.2,
                     j as f32 * 0.7,
                     radial,
                     Shader::Planet(p.surface),
@@ -358,7 +359,7 @@ fn render_frame(
             &meshes[mesh],
             cam,
             position,
-            p.radius * scale_factor,
+            p.radius,
             time * p.spin,
             Shader::Planet(p.surface),
             time,
@@ -369,7 +370,7 @@ fn render_frame(
             renderer.draw_mesh(
                 &meshes["ring"],
                 cam,
-                position + Vec3::new(p.radius * scale_factor + 1.2, 0.0, 0.0),
+                position + Vec3::new(p.radius + 2.0, 0.0, 0.0),
                 0.75,
                 time * 1.6,
                 Shader::Ring,
@@ -386,17 +387,21 @@ fn render_frame(
         }
     }
     if let Mode::Returning {
-        radial, remaining, ..
+        planet,
+        normal,
+        remaining,
+        ..
     } = mode
     {
         let direction = (cam.target - cam.pos).norm();
+        let up = normal.rotate_y(time * planets[planet].spin);
         renderer.draw_mesh_oriented(
             &meshes["ring"],
             cam,
             cam.pos + direction * 1.8,
             0.2 + (0.7 - remaining) * 0.45,
             time * 3.0,
-            radial,
+            up,
             Shader::Ring,
             time,
         );
@@ -424,6 +429,7 @@ fn render_video(
     skies: &HashMap<&str, Vec<u8>>,
     planets: &[scene::Planet],
     decorations: &[Vec<scene::Placement>],
+    landings: &[scene::SurfacePoint],
 ) {
     use std::{
         io::Write,
@@ -468,30 +474,33 @@ fn render_video(
             let time = i as f32 * 6.0 + u * 6.0;
             let center = p.position(time);
             let (ship, mode) = if u >= 0.55 && u < 0.78 {
-                let a = (u - 0.55) / 0.23 * 0.75;
-                let radial = Vec3::new(a.sin() * 0.35, 0.93, a.cos() * 0.35).norm();
+                let landing = landings[i];
+                let local = landing.position + landing.normal * 0.015;
                 (
                     Ship {
-                        pos: center + radial * (p.radius + 4.0),
+                        pos: center
+                            + local.rotate_y(time * p.spin) * p.radius
+                            + landing.normal.rotate_y(time * p.spin) * 4.0,
                         yaw: 0.0,
                         speed: 0.0,
                         camera_far: false,
                     },
                     Mode::Surface {
                         planet: i,
-                        radial,
-                        yaw: 0.25,
+                        local,
+                        normal: landing.normal,
+                        yaw: (u - 0.55) * 3.0,
                     },
                 )
             } else {
                 let a = if u < 0.55 { (u / 0.55) * 2.3 } else { 2.3 };
                 let radial = Vec3::new(a.cos(), 0.12, a.sin()).norm();
                 let distance = if u < 0.25 {
-                    14.0 - (u / 0.25) * 8.0
+                    p.radius * 3.5 - (u / 0.25) * (p.radius * 2.5 - 3.0)
                 } else if u < 0.78 {
-                    p.radius + 2.5
+                    p.radius + 3.0
                 } else {
-                    p.radius + 2.5 + (u - 0.78) / 0.22 * 14.0
+                    p.radius + 3.0 + (u - 0.78) / 0.22 * p.radius * 2.5
                 };
                 let pos = center + radial * distance;
                 let yaw = (-radial.x).atan2(radial.z);

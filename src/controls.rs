@@ -1,13 +1,17 @@
 use crate::{
+    asset::Mesh,
     math::Vec3,
-    scene::{Mode, Planet, Ship},
+    scene::{self, Mode, Planet, Ship, SurfacePoint},
 };
 use raylib::prelude::*;
+use std::collections::HashMap;
 pub fn update(
     rl: &RaylibHandle,
     dt: f32,
     time: f32,
     planets: &[Planet],
+    meshes: &HashMap<&str, Mesh>,
+    landings: &[SurfacePoint],
     ship: &mut Ship,
     mode: &mut Mode,
 ) {
@@ -18,7 +22,7 @@ pub fn update(
     {
         if rl.is_key_pressed(*key) {
             let p = planets[i].position(time);
-            ship.pos = p + Vec3::new(planets[i].radius * 1.55 + 4.0, 1.3, 0.0);
+            ship.pos = p + Vec3::new(planets[i].radius + 6.0, 2.0, 0.0);
             ship.yaw = -std::f32::consts::FRAC_PI_2;
             ship.speed = 0.0;
             *mode = Mode::Space
@@ -34,21 +38,21 @@ pub fn update(
             let thrust = (rl.is_key_down(KEY_W) as i32 - rl.is_key_down(KEY_S) as i32) as f32;
             let target = thrust
                 * if rl.is_key_down(KEY_LEFT_SHIFT) {
-                    29.0
+                    100.0
                 } else {
-                    13.0
+                    35.0
                 };
             ship.speed += (target - ship.speed) * (dt * 2.0).min(1.0);
             ship.pos += ship.forward() * ship.speed * dt;
             let strafe = (rl.is_key_down(KEY_D) as i32 - rl.is_key_down(KEY_A) as i32) as f32;
-            ship.pos += Vec3::new(ship.yaw.cos(), 0.0, ship.yaw.sin()) * strafe * 7.0 * dt;
+            ship.pos += Vec3::new(ship.yaw.cos(), 0.0, ship.yaw.sin()) * strafe * 25.0 * dt;
             ship.pos.y += (rl.is_key_down(KEY_SPACE) as i32
                 - rl.is_key_down(KEY_LEFT_CONTROL) as i32) as f32
-                * 7.0
+                * 25.0
                 * dt;
             for p in planets {
                 let delta = ship.pos - p.position(time);
-                let min = p.radius * 1.55 + 0.8;
+                let min = p.radius + 1.2;
                 if delta.len() < min {
                     ship.pos = p.position(time) + delta.norm() * min;
                     ship.speed = 0.0
@@ -56,13 +60,14 @@ pub fn update(
             }
             if rl.is_key_pressed(KEY_E) {
                 if let Some((i, _)) = planets.iter().enumerate().find(|(_, p)| {
-                    (ship.pos - (p.position(time) + Vec3::new(p.radius * 1.55 + 1.2, 0.0, 0.0)))
-                        .len()
-                        < 5.0
+                    (ship.pos - (p.position(time) + Vec3::new(p.radius + 2.0, 0.0, 0.0))).len()
+                        < 7.0
                 }) {
+                    let landing = landings[i];
                     *mode = Mode::Surface {
                         planet: i,
-                        radial: Vec3::new(0.0, 1.0, 0.0),
+                        local: landing.position + landing.normal * 0.015,
+                        normal: landing.normal,
                         yaw: 0.0,
                     };
                     ship.speed = 0.0
@@ -71,25 +76,33 @@ pub fn update(
         }
         Mode::Surface {
             planet,
-            radial,
+            local,
+            normal,
             yaw,
         } => {
             *yaw += (rl.is_key_down(KEY_RIGHT) as i32 - rl.is_key_down(KEY_LEFT) as i32) as f32
                 * 1.8
                 * dt;
-            *radial = radial.rotate_y(planets[*planet].spin * dt);
-            let north = (Vec3::new(0.0, 0.0, -1.0)
-                - *radial * radial.dot(Vec3::new(0.0, 0.0, -1.0)))
-            .norm();
-            let side = north.cross(*radial).norm();
+            let north = scene::surface_forward(*local, *normal);
+            let side = north.cross(*normal).norm();
             let f = north * yaw.cos() + side * yaw.sin();
             let step = (rl.is_key_down(KEY_W) as i32 - rl.is_key_down(KEY_S) as i32) as f32;
             let strafe = (rl.is_key_down(KEY_D) as i32 - rl.is_key_down(KEY_A) as i32) as f32;
-            *radial = (*radial + (f * step + f.cross(*radial).norm() * strafe) * dt * 0.45).norm();
+            let candidate = *local
+                + (f * step + f.cross(*normal).norm() * strafe)
+                    * dt
+                    * (3.5 / planets[*planet].radius);
+            if let Some(hit) =
+                scene::closest_floor(&meshes[planets[*planet].mesh], candidate, *normal, 0.09)
+            {
+                *normal = (*normal * 0.65 + hit.normal * 0.35).norm();
+                *local = hit.position + *normal * 0.015;
+            }
             if rl.is_key_pressed(KEY_R) {
                 *mode = Mode::Returning {
                     planet: *planet,
-                    radial: *radial,
+                    local: *local,
+                    normal: *normal,
                     yaw: *yaw,
                     remaining: 0.7,
                 };
@@ -97,16 +110,18 @@ pub fn update(
         }
         Mode::Returning {
             planet,
-            radial,
+            local,
+            normal,
             remaining,
             ..
         } => {
-            *radial = radial.rotate_y(planets[*planet].spin * dt);
             *remaining -= dt;
             if *remaining <= 0.0 {
                 let p = planets[*planet].position(time);
-                ship.pos = p + *radial * (planets[*planet].radius * 1.55 + 2.5);
-                ship.yaw = radial.x.atan2(-radial.z);
+                let rotation = time * planets[*planet].spin;
+                let up = normal.rotate_y(rotation);
+                ship.pos = p + local.rotate_y(rotation) * planets[*planet].radius + up * 4.0;
+                ship.yaw = up.x.atan2(-up.z);
                 ship.speed = 0.0;
                 *mode = Mode::Space;
             }
