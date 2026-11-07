@@ -1,6 +1,6 @@
 # Space Travel — Galaxy Tour
 
-Simulación explorable de un sistema solar inspirado en los pequeños mundos de **Super Mario Galaxy**. Cinco planetas giran sobre su eje y orbitan un sol en el plano eclíptico. Una nave original permite volar entre ellos, acercarse sin cambiar de escena y usar anillos estelares para observar su superficie. Es una demostración gráfica: no hay vidas, daño ni objetivos de juego.
+Simulación explorable de un sistema solar inspirado en los pequeños mundos de **Super Mario Galaxy**. Cinco planetas giran sobre su eje y orbitan un sol en el plano eclíptico. La **Starship Mario** permite volar entre ellos, acercarse sin cambiar de escena y usar anillos estelares para observar su superficie. Es una demostración gráfica: no hay vidas, daño ni objetivos de juego.
 
 [![Vista del recorrido](media/preview.png)](media/galaxy-tour.mp4)
 
@@ -20,11 +20,12 @@ La ventana inicia cerca de Yoshi Star. En equipos lentos, reducir `W` y `H` en `
 
 | Tecla | Vuelo espacial | Cerca de la superficie |
 | --- | --- | --- |
-| `W` / `S` | Acelerar / retroceder | Avanzar / retroceder |
-| `A` / `D` | Desplazamiento lateral | Desplazamiento lateral |
+| `W` / `S` | Acelerar / retroceder | Rodear el modelo hacia delante / atrás |
+| `A` / `D` | Desplazamiento lateral | Rodear el modelo lateralmente |
 | `←` / `→` | Girar la nave | Girar la vista |
 | `Espacio` / `Ctrl izquierdo` | Subir / bajar | — |
 | `Shift izquierdo` | Impulso rápido | — |
+| `C` | Alternar cámara cercana/lejana y nave grande/mini | — |
 | `1`–`5` | Viajar cerca de un planeta | Volver al vuelo cerca del planeta elegido |
 | `E` | Usar el anillo estelar cuando esté cerca | — |
 | `R` | — | Invocar un anillo y regresar a la nave |
@@ -37,24 +38,24 @@ La ventana inicia cerca de Yoshi Star. En equipos lentos, reducir `W` y `H` en `
 | Planeta | Identidad visual | Material y fondo |
 | --- | --- | --- |
 | Yoshi Star | Jardín con arbustos, flores y tuberías | Césped y cielo galáctico |
-| Fluffy Bluff | Islas y fuentes sobre un núcleo acuático | Agua animada y nubes |
+| Fluffy Bluff | Islas, fuentes y relieve original | Efecto acuático y nubes |
 | Freezeflame Ice | Montañas heladas y estructuras | Brillo de hielo y aurora |
 | Volcano Sandwich | Relieve volcánico y géiseres | Lava animada y cielo rojizo |
 | Throwback Fortress | Fortaleza, bloques y cajas | Reflejos metálicos y cielo del observatorio |
 
-Los objetos pequeños se distribuyen con una secuencia determinista sobre una esfera y se orientan según la normal de la superficie. La posición de la distribución gira con cada planeta.
+Los planetas se dibujan **solo con sus modelos originales**, sin esferas añadidas. Los objetos pequeños se distribuyen de forma determinista sobre triángulos de esas mallas y se orientan según la normal local. La posición de la distribución gira con cada planeta.
 
 ## Implementación
 
 - `src/renderer.rs`: transformación de vértices, cámara, proyección en perspectiva, rasterización de triángulos, interpolación de color con corrección de perspectiva, z-buffer y shaders de fragmento en CPU. Raylib solo abre la ventana, recibe teclas, presenta el framebuffer y dibuja el HUD 2D.
 - `src/math.rs`: vectores y operaciones geométricas.
-- `src/asset.rs`: lector del formato de malla compacto y geometría original de la nave y de los núcleos planetarios. Los núcleos tienen una deformación determinista leve.
+- `src/asset.rs`: lector del formato de malla compacto y geometría procedural del sol.
 - `src/scene.rs`: parámetros de órbita, rotación, materiales y modos de exploración.
 - `src/controls.rs`: aceleración dependiente de `dt`, giro, desplazamiento, viajes rápidos y anillos.
 - `src/main.rs`: composición de la escena, fondos por planeta, niveles de detalle y generación del video.
 - `tools/convert_assets.py`: conversión opcional de los ZIP originales DAE/PNG a las mallas y cielos ya incluidos. Requiere Python, Pillow y lxml; los ZIP originales proporcionados para el proyecto deben estar en `assets/` para volver a ejecutar la conversión.
 
-El renderizador elige las versiones mini de cuatro planetas cuando están lejos; el contador de triángulos aparece abajo a la izquierda para comparar el trabajo cercano y lejano. Volcano Sandwich reutiliza su misma malla a distancia. También descarta modelos situados detrás de la cámara o más allá del límite del sistema. Los shaders CPU del sol, agua, hielo, lava, metal y anillos usan cálculos diferentes; los del sol, agua, lava y anillo cambian con el tiempo.
+El renderizador elige las versiones mini de cuatro planetas cuando están lejos. La cámara lejana usa la versión mini de Starship Mario; la cámara cercana usa el modelo grande. La escala visual de cada planeta crece suavemente hasta 1.55 veces al acercarse, además del aumento natural por perspectiva. El modo cercano emplea un fondo distinto para cada planeta. El contador de triángulos aparece abajo a la izquierda para comparar el trabajo cercano y lejano. Volcano Sandwich reutiliza su misma malla a distancia. También se descartan modelos situados detrás de la cámara o más allá del límite del sistema. Los shaders CPU del sol, agua, hielo, lava, metal y anillos usan cálculos diferentes; los del sol, agua, lava y anillo cambian con el tiempo.
 
 Opciones para reproducir material de la entrega:
 
@@ -68,7 +69,7 @@ Las capturas se guardan en `/tmp/space_travel.ppm`; el video se guarda en `media
 
 ## Recursos, autoría y alcance
 
-La nave geométrica y el pipeline de software fueron creados para este proyecto. Los modelos de planetas, anillo, objetos y fondos provienen de los archivos de **Super Mario Galaxy / Super Mario Galaxy 2** proporcionados en `assets/` al iniciar el trabajo; los derechos de esos diseños pertenecen a sus autores y a Nintendo. Se transformaron para uso académico en mallas compactas con colores muestreados de sus texturas. No se incluyen los ZIP originales, grandes y opcionales; sí se incluyen todos los recursos que necesita el ejecutable. Se utilizó asistencia de IA para implementar y documentar el proyecto.
+El pipeline de software fue creado para este proyecto. Los modelos de Starship Mario, planetas, anillo, objetos y fondos provienen de los archivos de **Super Mario Galaxy / Super Mario Galaxy 2** proporcionados en `assets/` al iniciar el trabajo; los derechos de esos diseños pertenecen a sus autores y a Nintendo. Se transformaron para uso académico en mallas compactas con colores muestreados de sus texturas. No se incluyen los ZIP originales, grandes y opcionales; sí se incluyen todos los recursos que necesita el ejecutable. Se utilizó asistencia de IA para implementar y documentar el proyecto.
 
 **Integrantes y contribuciones:** completar con los nombres reales antes de entregar. El historial de commits separa el renderer, cada planeta y la navegación de superficie.
 

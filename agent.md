@@ -24,3 +24,6 @@ Mantener órbitas y cámara en una escena continua. Proteger rendimiento con det
 
 ## Implementación actual
 Pipeline Rust modular en `src/`; assets DAE/PNG convertidos a `assets/processed/` mediante `tools/convert_assets.py`. Cinco planetas, sol procedural, nave original, anillos, modo superficie, fondos por planeta, shaders CPU, z-buffer, LOD, descarte y video `media/galaxy-tour.mp4`. Los archivos ZIP originales se ignoran en Git; las mallas/cielos compactos sí están versionados. `README.md` contiene controles y créditos. No hay remoto Git ni nombres de integrantes confirmados; no inventarlos.
+
+## Corrección posterior solicitada por el usuario
+No añadir esferas a los planetas: se usan solo las mallas DAE convertidas. La nave de vuelo es Starship Mario (`MarioFaceShipPlanet`) y su mini (`MiniPlayerRocket`) con cambio de cámara mediante `C`. El planeta escala suavemente hasta 1.55× al acercarse. Cada modo de exploración cercana fuerza un fondo propio extraído de los ZIP de skybox. Los objetos se apoyan en triángulos de las mallas originales. El sol sigue siendo procedural, lo que no contradice la instrucción sobre planetas.
