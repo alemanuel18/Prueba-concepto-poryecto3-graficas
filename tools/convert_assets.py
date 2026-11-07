@@ -13,8 +13,6 @@ from lxml import etree as ET
 from PIL import Image
 
 SPECS = [
-    ('sun', 'Common Map Objects - Sun.zip', 'Sun/Sun.dae'),
-    ('ship', 'Mini Galaxies - Mini Starship Mario.zip', 'Mini Starship Mario/MiniPlayerRocket.dae'),
     ('ring', 'Objects - Launch Star.zip', 'Launch Star/SuperSpinDriver.dae'),
     ('yoshi', 'Yoshi Star Starting Planet.zip', 'Start Planet/YoshiCaughtPlanet.dae'),
     ('fluffy', 'Fluffy Bluff Valley Planet.zip', 'CloudAcrossValleyPlanet.dae'),
@@ -25,6 +23,13 @@ SPECS = [
     ('fluffy_low', 'Mini Fluffy Buff Galaxy.zip', 'MiniMokumokuValleyGalaxy.dae'),
     ('ice_low', 'Mini Freezeflame Galaxy.zip', 'Freezeflame Galaxy/MiniIceVolcanoGalaxy.dae'),
     ('fortress_low', 'Mini Throwback Galaxy.zip', 'MiniLongForCastleGalaxy.dae'),
+    ('bush', 'Common Map Objects - Bush.zip', 'Bush/CutBush.dae'),
+    ('flower', 'Common Map Objects - Flowers.zip', 'Flowers/Flower.dae'),
+    ('pipe', 'Common Map Objects - Warp Pipe.zip', 'Warp Pipe/EarthenPipe.dae'),
+    ('fountain', 'Common Map Objects - Water Fountain.zip', 'Water Fountain/FountainBig.dae'),
+    ('geyser', 'Common Map Objects - Lava Geyser.zip', 'Lava Geyser/LavaGeyser.dae'),
+    ('crate', 'Common Map Objects - Strong Block.zip', 'Strong Block/StrongBlock.dae'),
+    ('falling_crate', 'Common Map Objects - Falling Crate.zip', 'Falling Crate/GravityFallBlock.dae'),
 ]
 
 def tag(node, name):

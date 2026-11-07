@@ -45,7 +45,7 @@ impl Renderer {
         let shift = (yaw / std::f32::consts::TAU * 256.0) as i32;
         let base = match kind {
             Some(Surface::Grass) => [4.0, 12.0, 26.0],
-            Some(Surface::Cloud) => [12.0, 18.0, 35.0],
+            Some(Surface::Water) => [12.0, 18.0, 35.0],
             Some(Surface::Ice) => [3.0, 11.0, 30.0],
             Some(Surface::Lava) => [16.0, 5.0, 20.0],
             Some(Surface::Metal) => [7.0, 9.0, 28.0],
@@ -97,6 +97,34 @@ impl Renderer {
         shader: Shader,
         time: f32,
     ) {
+        self.draw_mesh_oriented(
+            mesh,
+            cam,
+            center,
+            scale,
+            rotation,
+            Vec3::new(0.0, 1.0, 0.0),
+            shader,
+            time,
+        );
+    }
+    pub fn draw_mesh_oriented(
+        &mut self,
+        mesh: &Mesh,
+        cam: Camera,
+        center: Vec3,
+        scale: f32,
+        rotation: f32,
+        up: Vec3,
+        shader: Shader,
+        time: f32,
+    ) {
+        let right = if up.y.abs() > 0.95 {
+            Vec3::new(1.0, 0.0, 0.0)
+        } else {
+            Vec3::new(0.0, 1.0, 0.0).cross(up).norm()
+        };
+        let forward = right.cross(up).norm();
         let b = Self::basis(cam);
         let dist = (center - cam.pos).len();
         if dist > 180.0 || (center - cam.pos).dot(b.2) < -scale {
@@ -105,7 +133,10 @@ impl Renderer {
         }
         let sun_dir = (Vec3::new(0.0, 0.0, 0.0) - center).norm();
         for tri in mesh.vertices.chunks_exact(3) {
-            let world = [0, 1, 2].map(|i| center + tri[i].pos.rotate_y(rotation) * scale);
+            let world = [0, 1, 2].map(|i| {
+                let v = tri[i].pos.rotate_y(rotation);
+                center + (right * v.x + up * v.y + forward * v.z) * scale
+            });
             let Some(a) = Self::project(world[0], tri[0].color, cam, b) else {
                 continue;
             };
@@ -116,7 +147,7 @@ impl Renderer {
                 continue;
             };
             let normal = (world[1] - world[0]).cross(world[2] - world[0]).norm();
-            let lit = (0.45 + 0.55 * normal.dot(sun_dir).abs()).clamp(0.25, 1.0);
+            let lit = (0.62 + 0.38 * normal.dot(sun_dir).abs()).clamp(0.45, 1.0);
             self.triangle([a, c, d], shader, lit, time);
             self.triangles += 1;
         }
@@ -210,7 +241,14 @@ impl Renderer {
                             *v = (*v + spec).min(255.0)
                         }
                     }
-                    Shader::Planet(Surface::Cloud) => rgb[2] = (rgb[2] + 18.0).min(255.0),
+                    Shader::Planet(Surface::Water) => {
+                        let wave =
+                            ((px * 0.07 + time * 2.2).sin() + (py * 0.11 - time * 1.7).cos()) * 0.5
+                                + 0.5;
+                        rgb[0] = (rgb[0] * 0.55).min(255.0);
+                        rgb[1] = (rgb[1] + wave * 26.0).min(255.0);
+                        rgb[2] = (rgb[2] + wave * 45.0).min(255.0);
+                    }
                     Shader::Ring => {
                         let p = (time * 3.0).sin() * 0.15 + 1.0;
                         rgb = [

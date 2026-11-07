@@ -83,10 +83,27 @@ pub fn update(
             let strafe = (rl.is_key_down(KEY_D) as i32 - rl.is_key_down(KEY_A) as i32) as f32;
             *radial = (*radial + (f * step + side * strafe) * dt * 0.45).norm();
             if rl.is_key_pressed(KEY_R) {
+                *mode = Mode::Returning {
+                    planet: *planet,
+                    radial: *radial,
+                    yaw: *yaw,
+                    remaining: 0.7,
+                };
+            }
+        }
+        Mode::Returning {
+            planet,
+            radial,
+            remaining,
+            ..
+        } => {
+            *radial = radial.rotate_y(planets[*planet].spin * dt);
+            *remaining -= dt;
+            if *remaining <= 0.0 {
                 let p = planets[*planet].position(time);
                 ship.pos = p + *radial * (planets[*planet].radius + 2.5);
                 ship.speed = 0.0;
-                *mode = Mode::Space
+                *mode = Mode::Space;
             }
         }
     }

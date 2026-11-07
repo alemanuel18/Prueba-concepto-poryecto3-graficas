@@ -2,7 +2,7 @@ use crate::math::Vec3;
 #[derive(Clone, Copy, Debug)]
 pub enum Surface {
     Grass,
-    Cloud,
+    Water,
     Ice,
     Lava,
     Metal,
@@ -41,7 +41,7 @@ pub fn planets() -> Vec<Planet> {
             name: "Fluffy Bluff",
             mesh: "fluffy",
             low: "fluffy_low",
-            surface: Surface::Cloud,
+            surface: Surface::Water,
             radius: 3.8,
             orbit: 27.0,
             orbit_speed: 0.038,
@@ -100,5 +100,11 @@ pub enum Mode {
         planet: usize,
         radial: Vec3,
         yaw: f32,
+    },
+    Returning {
+        planet: usize,
+        radial: Vec3,
+        yaw: f32,
+        remaining: f32,
     },
 }

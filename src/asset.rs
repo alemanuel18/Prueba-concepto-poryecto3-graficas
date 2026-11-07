@@ -31,9 +31,12 @@ impl Mesh {
 }
 impl Mesh {
     pub fn sphere() -> Self {
+        Self::sphere_colored([245, 170, 62])
+    }
+    pub fn sphere_colored(color: [u8; 3]) -> Self {
         let mut vertices = Vec::new();
-        let stacks = 18;
-        let slices = 36;
+        let stacks = 24;
+        let slices = 48;
         for y in 0..stacks {
             for x in 0..slices {
                 let point = |ix: i32, iy: i32| {
@@ -50,9 +53,13 @@ impl Mesh {
                 let c = point(x + 1, y + 1);
                 let d = point(x, y + 1);
                 for pos in [a, b, c, a, c, d] {
+                    let noise =
+                        (pos.x * 9.0).sin() * (pos.y * 7.0).cos() + 0.45 * (pos.z * 13.0).sin();
+                    let shade = (0.86 + 0.14 * noise).clamp(0.65, 1.08);
+                    let color = color.map(|v| (v as f32 * shade).clamp(0.0, 255.0) as u8);
                     vertices.push(Vertex {
-                        pos,
-                        color: [245, 170, 62],
+                        pos: pos * (1.0 + 0.018 * noise),
+                        color,
                     });
                 }
             }
