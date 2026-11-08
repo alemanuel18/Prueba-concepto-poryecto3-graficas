@@ -34,6 +34,50 @@ SPECS = [
     ('falling_crate', 'Common Map Objects - Falling Crate.zip', 'Falling Crate/GravityFallBlock.dae'),
 ]
 
+def export_luigi():
+    paths = glob.glob('assets/*Playable Characters - Luigi.zip')
+    if not paths: print('missing luigi'); return
+    with zipfile.ZipFile(paths[0]) as z:
+        materials = {}
+        current = None
+        for line in z.read('Luigi/luiginpc.mtl').decode().splitlines():
+            words = line.split()
+            if not words: continue
+            if words[0] == 'newmtl': current = words[1]
+            if words[0] == 'map_Kd' and current:
+                materials[current] = Image.open(io.BytesIO(z.read('Luigi/' + words[1]))).convert('RGB')
+        positions, texcoords, chunks = [], [], []
+        texture = None
+        for line in z.read('Luigi/luiginpc.obj').decode().splitlines():
+            words = line.split()
+            if not words: continue
+            if words[0] == 'v': positions.append(tuple(map(float, words[1:4])))
+            elif words[0] == 'vt': texcoords.append(tuple(map(float, words[1:3])))
+            elif words[0] == 'usemtl': texture = materials.get(words[1])
+            elif words[0] == 'f':
+                polygon = []
+                for token in words[1:]:
+                    indices = token.split('/')
+                    p = positions[int(indices[0])-1]
+                    rgb = (180,180,190)
+                    if texture is not None and len(indices)>1 and indices[1]:
+                        u,v = texcoords[int(indices[1])-1]
+                        rgb = texture.getpixel((int(u*texture.width)%texture.width,
+                                                int((1-v)*texture.height)%texture.height))
+                    polygon.append((p,rgb))
+                for j in range(1,len(polygon)-1):
+                    chunks.extend((polygon[0],polygon[j],polygon[j+1]))
+        points=[p for p,_ in chunks]
+        mins=[min(p[i] for p in points) for i in range(3)]
+        maxs=[max(p[i] for p in points) for i in range(3)]
+        center=[(mins[i]+maxs[i])/2 for i in range(3)]
+        radius=max((sum((p[i]-center[i])**2 for i in range(3)))**.5 for p in points)
+        with open('assets/processed/luigi.mesh','wb') as f:
+            f.write(struct.pack('<I',len(chunks)))
+            for p,rgb in chunks:
+                f.write(struct.pack('<fffBBB',*((p[i]-center[i])/radius for i in range(3)),*rgb))
+        print('luigi',len(chunks)//3,'triangles')
+
 def tag(node, name):
     return node.find('{*}' + name)
 
@@ -149,4 +193,5 @@ def main():
                 for p,rgb in chunks:
                     f.write(struct.pack('<fffBBB',*((p[i]-center[i])/radius for i in range(3)),*rgb))
             print(name,len(chunks)//3,'triangles',os.path.getsize(out)//1024,'KiB')
+    export_luigi()
 if __name__=='__main__':main()
