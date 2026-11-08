@@ -74,13 +74,13 @@ impl Pose {
         } else {
             self.up
         };
-        let aim = self.ground + self.up * (HEIGHT * 0.8) + self.forward * (HEIGHT * 1.0);
+        let aim = self.ground + self.up * (HEIGHT * 0.5) + self.forward * (HEIGHT * 0.8);
         let desired = if self.starship {
-            self.ground + self.up * (HEIGHT * 3.8) - self.forward * (HEIGHT * 4.2)
+            self.ground + self.up * (HEIGHT * 2.5) - self.forward * (HEIGHT * 2.8)
         } else {
-            self.ground + self.up * (HEIGHT * 2.6) - self.forward * (HEIGHT * 5.0)
+            self.ground + self.up * (HEIGHT * 1.6) - self.forward * (HEIGHT * 2.5)
         };
-        let start = self.ground + self.up * (HEIGHT * 0.9);
+        let start = self.ground + self.up * (HEIGHT * 0.6);
         let a = self.localize(start);
         let b = self.localize(desired);
         let t = first_intersection(mesh, a, b)
