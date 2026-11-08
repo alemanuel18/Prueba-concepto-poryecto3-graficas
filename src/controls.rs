@@ -22,7 +22,7 @@ pub fn update(
     mode: &mut Mode,
 ) {
     use KeyboardKey::*;
-    for (i, key) in [KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR, KEY_FIVE]
+    for (i, key) in [KEY_ONE, KEY_TWO, KEY_THREE, KEY_FOUR]
         .iter()
         .enumerate()
     {

@@ -16,7 +16,6 @@ fn main() {
         "yoshi",
         "fluffy",
         "ice",
-        "lava",
         "fortress",
         "yoshi_low",
         "fluffy_low",
@@ -26,7 +25,6 @@ fn main() {
         "flower",
         "pipe",
         "fountain",
-        "geyser",
         "crate",
         "falling_crate",
         "starship",
@@ -50,7 +48,6 @@ fn main() {
         "yoshi_surface",
         "fluffy_surface",
         "ice_surface",
-        "lava_surface",
         "fortress_surface",
     ]
     .into_iter()
@@ -202,7 +199,7 @@ fn main() {
                     Color::RAYWHITE,
                 );
                 d.draw_text(
-                    "Shift impulso  C camara lejana  1-5 viajar  E anillo  F explorar nave",
+                    "Shift impulso  C camara lejana  1-4 viajar  E anillo  F explorar nave",
                     22,
                     69,
                     15,
@@ -329,7 +326,6 @@ fn render_frame(
             "yoshi_surface",
             "fluffy_surface",
             "ice_surface",
-            "lava_surface",
             "fortress_surface",
         ][i];
         skies[name].as_slice()
@@ -370,8 +366,8 @@ fn render_frame(
             Surface::Grass => &["bush", "flower", "pipe"],
             Surface::Water => &["fountain", "flower", "bush"],
             Surface::Ice => &["crate", "pipe"],
-            Surface::Lava => &["geyser", "crate"],
             Surface::Metal => &["falling_crate", "pipe", "crate"],
+            Surface::Lava => unreachable!("Volcano Sandwich was removed"),
         };
         if dist < p.radius * 2.3 {
             for (j, placement) in decorations[i].iter().enumerate() {
@@ -411,14 +407,6 @@ fn render_frame(
                 time * 1.6,
                 Shader::Ring,
                 time,
-            );
-        }
-        if matches!(p.surface, Surface::Lava) {
-            renderer.draw_line(
-                cam,
-                position + Vec3::new(0.0, p.radius, 0.0),
-                position + Vec3::new(0.0, p.radius + 2.0 + (time * 2.0).sin() * 0.5, 0.0),
-                [255, 85, 18],
             );
         }
     }

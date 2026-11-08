@@ -419,17 +419,6 @@ pub fn planets() -> Vec<Planet> {
             phase: 2.4,
         },
         Planet {
-            name: "Volcano Sandwich",
-            mesh: "lava",
-            low: "lava",
-            surface: Surface::Lava,
-            radius: 13.0,
-            orbit: 232.0,
-            orbit_speed: 0.006,
-            spin: 0.13,
-            phase: 3.5,
-        },
-        Planet {
             name: "Throwback Fortress",
             mesh: "fortress",
             low: "fortress_low",
