@@ -51,6 +51,15 @@ pub fn surface_forward(local: Vec3, normal: Vec3) -> Vec3 {
 pub fn landing_point(mesh: &Mesh, kind: Surface) -> SurfacePoint {
     let mut best = None;
     let mut best_score = f32::NEG_INFINITY;
+    // Entry locations correspond to the first open walking areas visible in the reference footage.
+    // Coordinates are normalized positions in each supplied level mesh.
+    let entry = match kind {
+        Surface::Grass => Vec3::new(-0.20, 0.122, -0.15),
+        Surface::Water => Vec3::new(0.38, -0.212, 0.50),
+        Surface::Ice => Vec3::new(-0.39, -0.118, 0.10),
+        Surface::Metal => Vec3::new(0.608, -0.101, 0.395),
+        Surface::Lava => Vec3::new(0.0, 0.0, 0.0),
+    };
     for tri in mesh.vertices.chunks_exact(3) {
         let a = tri[0].pos;
         let b = tri[1].pos;
@@ -76,28 +85,27 @@ pub fn landing_point(mesh: &Mesh, kind: Surface) -> SurfacePoint {
             if normal.y < 0.0 {
                 normal = normal * -1.0;
             }
-            if normal.y < 0.65 || position.y < -0.4 {
+            if normal.y < 0.78 || position.y < -0.4 {
                 continue;
             }
         }
-        let horizontal = (position.x * position.x + position.z * position.z).sqrt();
-        let score = if matches!(kind, Surface::Grass) {
-            let rgb = [0, 1, 2].map(|k| {
-                (tri[0].color[k] as f32 + tri[1].color[k] as f32 + tri[2].color[k] as f32) / 3.0
-            });
-            if rgb[1] < rgb[0] * 1.2 || rgb[1] < rgb[2] * 1.1 {
-                continue;
-            }
-            area / (0.08 + horizontal).powi(2)
-        } else if matches!(kind, Surface::Ice | Surface::Metal) {
-            if position.y < 0.1 || normal.y < 0.75 {
-                continue;
-            }
-            area.sqrt() * (0.5 + 3.0 * position.y) * (0.5 + horizontal)
-        } else if matches!(kind, Surface::Lava) {
+        let rgb = [0, 1, 2].map(|k| {
+            (tri[0].color[k] as f32 + tri[1].color[k] as f32 + tri[2].color[k] as f32) / 3.0
+        });
+        let material_ok = match kind {
+            Surface::Grass | Surface::Water => rgb[1] > rgb[0] * 1.2 && rgb[1] > rgb[2] * 1.1,
+            Surface::Ice => rgb.iter().sum::<f32>() > 390.0,
+            Surface::Metal => rgb[1] > rgb[0] * 1.05,
+            Surface::Lava => true,
+        };
+        if !material_ok {
+            continue;
+        }
+        let score = if matches!(kind, Surface::Lava) {
             area * (1.0 - position.y.abs() * 0.4)
         } else {
-            area / (0.3 + horizontal) * (0.8 + position.y.max(0.0))
+            let distance = position - entry;
+            -distance.dot(distance) + area * 0.001
         };
         if score > best_score {
             best_score = score;
@@ -113,6 +121,7 @@ pub fn landing_point(mesh: &Mesh, kind: Surface) -> SurfacePoint {
 pub fn starship_landing(mesh: &Mesh) -> SurfacePoint {
     let mut best = None;
     let mut best_score = f32::NEG_INFINITY;
+    let entry = Vec3::new(-0.25, 0.69, 0.25);
     for tri in mesh.vertices.chunks_exact(3) {
         let a = tri[0].pos;
         let b = tri[1].pos;
@@ -123,7 +132,14 @@ pub fn starship_landing(mesh: &Mesh) -> SurfacePoint {
             continue;
         }
         let position = (a + b + c) * (1.0 / 3.0);
-        if position.y < 0.2 {
+        if position.y < 0.58 {
+            continue;
+        }
+        let light = tri
+            .iter()
+            .map(|v| v.color[0] as u32 + v.color[1] as u32 + v.color[2] as u32)
+            .sum::<u32>();
+        if light < 3 * 3 * 145 {
             continue;
         }
         let radial = position.norm();
@@ -134,8 +150,8 @@ pub fn starship_landing(mesh: &Mesh) -> SurfacePoint {
         if normal.dot(radial) < 0.8 {
             continue;
         }
-        let horizontal = (position.x * position.x + position.z * position.z).sqrt();
-        let score = area / (0.25 + horizontal);
+        let offset = position - entry;
+        let score = -offset.dot(offset) + area * 0.001;
         if score > best_score {
             best_score = score;
             best = Some(SurfacePoint { position, normal });
@@ -226,6 +242,78 @@ pub fn closest_floor(
         }
     }
     best
+}
+
+pub fn walk_step(
+    mesh: &Mesh,
+    start: SurfacePoint,
+    delta: Vec3,
+    profile: WalkProfile,
+    radius: f32,
+    height: f32,
+) -> SurfacePoint {
+    if delta.len() < 1e-6 {
+        return start;
+    }
+    let count = (delta.len() / 0.012).ceil().max(1.0) as usize;
+    let step = delta * (1.0 / count as f32);
+    let mut current = start;
+    for _ in 0..count {
+        let Some(next) = closest_floor(mesh, current.position + step, current, profile, 0.035)
+        else {
+            break;
+        };
+        if (next.position - current.position).dot(step.norm()) < step.len() * 0.3 {
+            break;
+        }
+        let forward = (step - next.normal * step.dot(next.normal)).norm();
+        let side = forward.cross(next.normal).norm();
+        let clearance = radius * 0.55;
+        let probes = [
+            next.position + forward * radius,
+            next.position + side * radius,
+            next.position - side * radius,
+        ];
+        if probes.iter().any(|&probe| {
+            closest_floor(mesh, probe, next, profile, clearance)
+                .is_none_or(|floor| (floor.position - probe).len() > clearance)
+        }) {
+            break;
+        }
+        if !wall_clear(mesh, next, profile, radius, height) {
+            break;
+        }
+        current = next;
+    }
+    current
+}
+
+fn wall_clear(
+    mesh: &Mesh,
+    floor: SurfacePoint,
+    profile: WalkProfile,
+    radius: f32,
+    height: f32,
+) -> bool {
+    let up = match profile {
+        WalkProfile::Planar => Vec3::new(0.0, 1.0, 0.0),
+        WalkProfile::Round | WalkProfile::Volcanic => floor.position.norm(),
+    };
+    let torso = floor.position + up * (height * 0.52);
+    for tri in mesh.vertices.chunks_exact(3) {
+        let a = tri[0].pos;
+        let b = tri[1].pos;
+        let c = tri[2].pos;
+        let cross = (b - a).cross(c - a);
+        if cross.len() < 1e-7 || cross.norm().dot(up).abs() >= 0.78 {
+            continue;
+        }
+        let nearest = closest_point_on_triangle(torso, a, b, c);
+        if (nearest - torso).len() < radius {
+            return false;
+        }
+    }
+    true
 }
 pub fn surface_placements(mesh: &Mesh, seed: u32, kind: Surface) -> Vec<Placement> {
     let candidates: Vec<_> = mesh
@@ -526,6 +614,39 @@ mod tests {
         );
     }
     #[test]
+    fn avatar_cannot_walk_through_a_wall() {
+        let points = [
+            Vec3::new(-1.0, 0.0, -1.0),
+            Vec3::new(1.0, 0.0, -1.0),
+            Vec3::new(0.0, 0.0, 1.0),
+            Vec3::new(0.3, 0.0, -0.5),
+            Vec3::new(0.3, 1.0, -0.5),
+            Vec3::new(0.3, 0.0, 0.5),
+        ];
+        let mesh = Mesh {
+            vertices: points
+                .into_iter()
+                .map(|pos| Vertex {
+                    pos,
+                    color: [130, 130, 130],
+                })
+                .collect(),
+        };
+        let start = super::SurfacePoint {
+            position: Vec3::new(0.1, 0.0, 0.0),
+            normal: Vec3::new(0.0, 1.0, 0.0),
+        };
+        let end = super::walk_step(
+            &mesh,
+            start,
+            Vec3::new(0.3, 0.0, 0.0),
+            super::WalkProfile::Planar,
+            0.04,
+            0.2,
+        );
+        assert!(end.position.x > 0.1 && end.position.x < 0.27);
+    }
+    #[test]
     fn every_landing_has_a_walkable_neighbor() {
         for planet in super::planets() {
             let mesh = Mesh::load(planet.mesh).unwrap();
@@ -541,16 +662,15 @@ mod tests {
             assert!(
                 directions.iter().any(|dir| {
                     let mut current = start;
-                    for _ in 0..30 {
-                        let Some(next) = super::closest_floor(
+                    for _ in 0..12 {
+                        let next = super::walk_step(
                             &mesh,
-                            current.position + *dir * 0.01,
                             current,
+                            *dir * 0.01,
                             profile,
-                            0.07,
-                        ) else {
-                            return false;
-                        };
+                            crate::avatar::RADIUS / planet.radius,
+                            crate::avatar::HEIGHT / planet.radius,
+                        );
                         if (next.position - current.position).len() < 0.001 {
                             return false;
                         }
@@ -567,14 +687,14 @@ mod tests {
         let forward = super::surface_forward(start.position, start.normal);
         let mut current = start;
         for _ in 0..30 {
-            let next = super::closest_floor(
+            let next = super::walk_step(
                 &mesh,
-                current.position + forward * 0.01,
                 current,
+                forward * 0.01,
                 super::WalkProfile::Round,
-                0.07,
-            )
-            .expect("Starship Mario has no useful walkable path");
+                crate::avatar::RADIUS / super::STARSHIP_SCALE,
+                crate::avatar::HEIGHT / super::STARSHIP_SCALE,
+            );
             assert!((next.position - current.position).len() > 0.001);
             current = next;
         }

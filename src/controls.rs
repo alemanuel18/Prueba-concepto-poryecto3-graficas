@@ -1,7 +1,11 @@
 use crate::{
     asset::Mesh,
+    avatar,
     math::Vec3,
-    scene::{self, Mode, Planet, STARSHIP_SCALE, Ship, SurfacePoint, SurfaceTarget, WalkProfile},
+    scene::{
+        self, Mode, Placement, Planet, STARSHIP_SCALE, Ship, SurfacePoint, SurfaceTarget,
+        WalkProfile,
+    },
 };
 use raylib::prelude::*;
 use std::collections::HashMap;
@@ -11,6 +15,7 @@ pub fn update(
     time: f32,
     planets: &[Planet],
     meshes: &HashMap<&str, Mesh>,
+    decorations: &[Vec<Placement>],
     landings: &[SurfacePoint],
     starship_landing: SurfacePoint,
     ship: &mut Ship,
@@ -79,7 +84,7 @@ pub fn update(
                     target: SurfaceTarget::Starship,
                     local: starship_landing.position + starship_landing.normal * 0.015,
                     normal: starship_landing.normal,
-                    yaw: 0.0,
+                    yaw: std::f32::consts::PI,
                 };
                 ship.speed = 0.0;
                 ship.camera_far = false;
@@ -113,13 +118,36 @@ pub fn update(
                     (&meshes["starship"], STARSHIP_SCALE, WalkProfile::Round)
                 }
             };
-            let candidate =
-                *local + (f * step + f.cross(*normal).norm() * strafe) * dt * (3.5 / scale);
+            let delta = (f * step + f.cross(*normal).norm() * strafe) * dt * (3.5 / scale);
             let previous = SurfacePoint {
                 position: *local - *normal * 0.015,
                 normal: *normal,
             };
-            if let Some(hit) = scene::closest_floor(mesh, candidate, previous, profile, 0.07) {
+            let hit = scene::walk_step(
+                mesh,
+                previous,
+                delta,
+                profile,
+                avatar::RADIUS / scale,
+                avatar::HEIGHT / scale,
+            );
+            let prop_collision = if let SurfaceTarget::Planet(i) = target {
+                decorations[*i].iter().enumerate().any(|(j, prop)| {
+                    let solid = match planets[*i].surface {
+                        scene::Surface::Grass => j % 3 == 2,
+                        scene::Surface::Water => j % 3 == 0,
+                        _ => true,
+                    };
+                    let difference = hit.position - prop.position;
+                    let lateral = difference - prop.normal * difference.dot(prop.normal);
+                    solid
+                        && difference.dot(prop.normal).abs() < avatar::HEIGHT / scale
+                        && lateral.len() < avatar::RADIUS / scale + prop.size * 0.16
+                })
+            } else {
+                false
+            };
+            if !prop_collision && (hit.position - previous.position).len() > 1e-5 {
                 *normal = (*normal * 0.65 + hit.normal * 0.35).norm();
                 *local = hit.position + *normal * 0.015;
             }
