@@ -7,7 +7,7 @@ use asset::Mesh;
 use math::Vec3;
 use raylib::prelude::*;
 use renderer::{Camera, H, Renderer, Shader, W};
-use scene::{Mode, Ship, Surface};
+use scene::{Mode, STARSHIP_SCALE, Ship, Surface, SurfaceTarget};
 use std::collections::HashMap;
 fn main() {
     let names = [
@@ -64,10 +64,11 @@ fn main() {
         .iter()
         .map(|p| scene::landing_point(&meshes[p.mesh], p.surface))
         .collect();
+    let starship_landing = scene::starship_landing(&meshes["starship"]);
     let decorations: Vec<_> = planets
         .iter()
         .enumerate()
-        .map(|(i, p)| scene::surface_placements(&meshes[p.mesh], 0xCAFE_2026 + i as u32))
+        .map(|(i, p)| scene::surface_placements(&meshes[p.mesh], 0xCAFE_2026 + i as u32, p.surface))
         .collect();
     let mut ship = Ship {
         pos: planets[0].position(0.0) + Vec3::new(planets[0].radius + 6.0, 2.0, 0.0),
@@ -86,6 +87,7 @@ fn main() {
             &planets,
             &decorations,
             &landings,
+            starship_landing,
         );
         return;
     }
@@ -100,9 +102,17 @@ fn main() {
             .unwrap_or(0)
             .min(planets.len() - 1);
         mode = Mode::Surface {
-            planet,
+            target: SurfaceTarget::Planet(planet),
             local: landings[planet].position + landings[planet].normal * 0.015,
             normal: landings[planet].normal,
+            yaw: 0.0,
+        };
+    }
+    if std::env::args().any(|a| a == "--snapshot-ship") {
+        mode = Mode::Surface {
+            target: SurfaceTarget::Starship,
+            local: starship_landing.position + starship_landing.normal * 0.015,
+            normal: starship_landing.normal,
             yaw: 0.0,
         };
     }
@@ -141,7 +151,15 @@ fn main() {
         let dt = rl.get_frame_time().min(0.05);
         time += dt;
         controls::update(
-            &rl, dt, time, &planets, &meshes, &landings, &mut ship, &mut mode,
+            &rl,
+            dt,
+            time,
+            &planets,
+            &meshes,
+            &landings,
+            starship_landing,
+            &mut ship,
+            &mut mode,
         );
         render_frame(
             &mut renderer,
@@ -181,19 +199,20 @@ fn main() {
                     Color::RAYWHITE,
                 );
                 d.draw_text(
-                    "Shift impulso  C camara lejana  1-5 viajar  E anillo",
+                    "Shift impulso  C camara lejana  1-5 viajar  E anillo  F explorar nave",
                     22,
                     69,
                     15,
                     Color::SKYBLUE,
                 );
             }
-            Mode::Surface { planet, .. } => {
+            Mode::Surface { target, .. } => {
+                let name = match target {
+                    SurfaceTarget::Planet(i) => planets[i].name,
+                    SurfaceTarget::Starship => "Starship Mario",
+                };
                 d.draw_text(
-                    &format!(
-                        "Explorando {}  |  W/S/A/D caminar  Flechas orientar",
-                        planets[planet].name
-                    ),
+                    &format!("Explorando {}  |  W/S/A/D caminar  Flechas orientar", name),
                     22,
                     49,
                     15,
@@ -207,9 +226,13 @@ fn main() {
                     Color::SKYBLUE,
                 );
             }
-            Mode::Returning { planet, .. } => {
+            Mode::Returning { target, .. } => {
+                let name = match target {
+                    SurfaceTarget::Planet(i) => planets[i].name,
+                    SurfaceTarget::Starship => "Starship Mario",
+                };
                 d.draw_text(
-                    &format!("Anillo estelar invocado en {}", planets[planet].name),
+                    &format!("Anillo estelar invocado en {}", name),
                     22,
                     49,
                     15,
@@ -245,48 +268,64 @@ fn render_frame(
         Mode::Space => {
             let f = ship.forward();
             Camera {
-                pos: ship.pos - f * if ship.camera_far { 13.0 } else { 4.5 }
-                    + Vec3::new(0.0, if ship.camera_far { 5.0 } else { 3.0 }, 0.0),
-                target: ship.pos + f * 5.0,
+                pos: ship.pos - f * if ship.camera_far { 27.0 } else { 12.0 }
+                    + Vec3::new(0.0, if ship.camera_far { 9.0 } else { 5.0 }, 0.0),
+                target: ship.pos + f * 12.0,
                 up: Vec3::new(0.0, 1.0, 0.0),
             }
         }
         Mode::Surface {
-            planet,
+            target,
             local,
             normal,
             yaw,
         }
         | Mode::Returning {
-            planet,
+            target,
             local,
             normal,
             yaw,
             ..
         } => {
-            let p = &planets[planet];
-            let rotation = time * p.spin;
-            let floor = p.position(time) + local.rotate_y(rotation) * p.radius;
+            let (center, rotation, scale, look_ahead) = match target {
+                SurfaceTarget::Planet(i) => {
+                    let p = &planets[i];
+                    (
+                        p.position(time),
+                        time * p.spin,
+                        p.radius,
+                        if matches!(p.surface, Surface::Lava) {
+                            0.12
+                        } else {
+                            0.35
+                        },
+                    )
+                }
+                SurfaceTarget::Starship => (ship.pos, ship.yaw, STARSHIP_SCALE, 0.35),
+            };
+            let floor = center + local.rotate_y(rotation) * scale;
             let up = normal.rotate_y(rotation).norm();
             let north = scene::surface_forward(local, normal);
             let side = north.cross(normal).norm();
             let forward = (north * yaw.cos() + side * yaw.sin()).rotate_y(rotation);
-            let eye = floor + up * (p.radius * 0.35);
-            let look_ahead = if matches!(p.surface, Surface::Lava) {
-                0.12
-            } else {
-                0.35
-            };
+            let eye = floor + up * (scale * 0.35);
             Camera {
                 pos: eye,
-                target: floor + forward * (p.radius * look_ahead),
+                target: floor + forward * (scale * look_ahead),
                 up,
             }
         }
     };
     let surface_planet = match mode {
-        Mode::Surface { planet, .. } | Mode::Returning { planet, .. } => Some(planet),
-        Mode::Space => None,
+        Mode::Surface {
+            target: SurfaceTarget::Planet(i),
+            ..
+        }
+        | Mode::Returning {
+            target: SurfaceTarget::Planet(i),
+            ..
+        } => Some(i),
+        _ => None,
     };
     let overlay = surface_planet.map(|i| {
         let name = [
@@ -365,7 +404,7 @@ fn render_frame(
             time,
         );
         // Launch star sits above each planet's visible hemisphere.
-        if !matches!(mode, Mode::Surface {planet: active,..} | Mode::Returning {planet: active,..} if active == i)
+        if !matches!(mode, Mode::Surface {target:SurfaceTarget::Planet(active),..} | Mode::Returning {target:SurfaceTarget::Planet(active),..} if active == i)
         {
             renderer.draw_mesh(
                 &meshes["ring"],
@@ -387,14 +426,18 @@ fn render_frame(
         }
     }
     if let Mode::Returning {
-        planet,
+        target,
         normal,
         remaining,
         ..
     } = mode
     {
         let direction = (cam.target - cam.pos).norm();
-        let up = normal.rotate_y(time * planets[planet].spin);
+        let rotation = match target {
+            SurfaceTarget::Planet(i) => time * planets[i].spin,
+            SurfaceTarget::Starship => ship.yaw,
+        };
+        let up = normal.rotate_y(rotation);
         renderer.draw_mesh_oriented(
             &meshes["ring"],
             cam,
@@ -406,16 +449,27 @@ fn render_frame(
             time,
         );
     }
-    if matches!(mode, Mode::Space) {
+    if matches!(
+        mode,
+        Mode::Space
+            | Mode::Surface {
+                target: SurfaceTarget::Starship,
+                ..
+            }
+            | Mode::Returning {
+                target: SurfaceTarget::Starship,
+                ..
+            }
+    ) {
         renderer.draw_mesh(
-            &meshes[if ship.camera_far {
+            &meshes[if ship.camera_far && matches!(mode, Mode::Space) {
                 "starship_low"
             } else {
                 "starship"
             }],
             cam,
             ship.pos,
-            1.0,
+            STARSHIP_SCALE,
             ship.yaw,
             Shader::Ship,
             time,
@@ -430,6 +484,7 @@ fn render_video(
     planets: &[scene::Planet],
     decorations: &[Vec<scene::Placement>],
     landings: &[scene::SurfacePoint],
+    starship_landing: scene::SurfacePoint,
 ) {
     use std::{
         io::Write,
@@ -469,26 +524,41 @@ fn render_video(
     let mut input = ffmpeg.stdin.take().expect("ffmpeg input");
     let mut frame = vec![0u8; W * H * 3];
     for (i, p) in planets.iter().enumerate() {
+        let mut walk = landings[i];
         for j in 0..60 {
             let u = j as f32 / 60.0;
             let time = i as f32 * 6.0 + u * 6.0;
             let center = p.position(time);
             let (ship, mode) = if u >= 0.55 && u < 0.78 {
-                let landing = landings[i];
-                let local = landing.position + landing.normal * 0.015;
+                let profile = if matches!(p.surface, Surface::Lava) {
+                    scene::WalkProfile::Round
+                } else {
+                    scene::WalkProfile::Planar
+                };
+                let forward = scene::surface_forward(walk.position, walk.normal);
+                if let Some(next) = scene::closest_floor(
+                    &meshes[p.mesh],
+                    walk.position + forward * 0.01,
+                    walk,
+                    profile,
+                    0.07,
+                ) {
+                    walk = next;
+                }
+                let local = walk.position + walk.normal * 0.015;
                 (
                     Ship {
                         pos: center
                             + local.rotate_y(time * p.spin) * p.radius
-                            + landing.normal.rotate_y(time * p.spin) * 4.0,
+                            + walk.normal.rotate_y(time * p.spin) * 4.0,
                         yaw: 0.0,
                         speed: 0.0,
                         camera_far: false,
                     },
                     Mode::Surface {
-                        planet: i,
+                        target: SurfaceTarget::Planet(i),
                         local,
-                        normal: landing.normal,
+                        normal: walk.normal,
                         yaw: (u - 0.55) * 3.0,
                     },
                 )
@@ -531,6 +601,53 @@ fn render_video(
         }
         println!("Rendered {} / 5 planets", i + 1);
     }
+    let mut ship_walk = starship_landing;
+    let ship_forward = scene::surface_forward(ship_walk.position, ship_walk.normal);
+    for j in 0..48 {
+        let time = 30.0 + j as f32 / 12.0;
+        let ship = Ship {
+            pos: Vec3::new(35.0, 7.0, -25.0),
+            yaw: 0.0,
+            speed: 0.0,
+            camera_far: false,
+        };
+        let mode = if j < 10 {
+            Mode::Space
+        } else {
+            if j < 38 {
+                if let Some(next) = scene::closest_floor(
+                    &meshes["starship"],
+                    ship_walk.position + ship_forward * 0.01,
+                    ship_walk,
+                    scene::WalkProfile::Round,
+                    0.07,
+                ) {
+                    ship_walk = next;
+                }
+            }
+            Mode::Surface {
+                target: SurfaceTarget::Starship,
+                local: ship_walk.position + ship_walk.normal * 0.015,
+                normal: ship_walk.normal,
+                yaw: (j - 10) as f32 / 38.0 * 1.5,
+            }
+        };
+        render_frame(
+            renderer,
+            meshes,
+            skies,
+            planets,
+            decorations,
+            &ship,
+            mode,
+            time,
+        );
+        for (idx, px) in renderer.pixels.chunks_exact(4).enumerate() {
+            frame[idx * 3..idx * 3 + 3].copy_from_slice(&px[..3]);
+        }
+        input.write_all(&frame).expect("encode Starship frame");
+    }
+    println!("Rendered Starship Mario surface");
     drop(input);
     assert!(
         ffmpeg.wait().expect("ffmpeg").success(),

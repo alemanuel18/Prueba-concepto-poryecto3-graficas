@@ -10,6 +10,18 @@ pub struct SurfacePoint {
     pub position: Vec3,
     pub normal: Vec3,
 }
+#[derive(Clone, Copy, Debug)]
+pub enum SurfaceTarget {
+    Planet(usize),
+    Starship,
+}
+#[derive(Clone, Copy, Debug)]
+pub enum WalkProfile {
+    Planar,
+    Round,
+}
+
+pub const STARSHIP_SCALE: f32 = 3.5;
 
 pub fn surface_forward(local: Vec3, normal: Vec3) -> Vec3 {
     let toward_center = local * -1.0;
@@ -46,10 +58,14 @@ pub fn landing_point(mesh: &Mesh, kind: Surface) -> SurfacePoint {
             continue;
         }
         let horizontal = (position.x * position.x + position.z * position.z).sqrt();
-        let score = if matches!(kind,Surface::Grass) {
-            let rgb=[0,1,2].map(|k| (tri[0].color[k] as f32+tri[1].color[k] as f32+tri[2].color[k] as f32)/3.0);
-            if rgb[1]<rgb[0]*1.2 || rgb[1]<rgb[2]*1.1 {continue}
-            area/(0.08+horizontal).powi(2)
+        let score = if matches!(kind, Surface::Grass) {
+            let rgb = [0, 1, 2].map(|k| {
+                (tri[0].color[k] as f32 + tri[1].color[k] as f32 + tri[2].color[k] as f32) / 3.0
+            });
+            if rgb[1] < rgb[0] * 1.2 || rgb[1] < rgb[2] * 1.1 {
+                continue;
+            }
+            area / (0.08 + horizontal).powi(2)
         } else if matches!(kind, Surface::Ice | Surface::Metal) {
             if position.y < 0.1 || normal.y < 0.75 {
                 continue;
@@ -58,6 +74,43 @@ pub fn landing_point(mesh: &Mesh, kind: Surface) -> SurfacePoint {
         } else {
             area / (0.3 + horizontal) * (0.8 + position.y.max(0.0))
         };
+        if score > best_score {
+            best_score = score;
+            best = Some(SurfacePoint { position, normal });
+        }
+    }
+    best.unwrap_or(SurfacePoint {
+        position: Vec3::new(0.0, 0.5, 0.0),
+        normal: Vec3::new(0.0, 1.0, 0.0),
+    })
+}
+
+pub fn starship_landing(mesh: &Mesh) -> SurfacePoint {
+    let mut best = None;
+    let mut best_score = f32::NEG_INFINITY;
+    for tri in mesh.vertices.chunks_exact(3) {
+        let a = tri[0].pos;
+        let b = tri[1].pos;
+        let c = tri[2].pos;
+        let cross = (b - a).cross(c - a);
+        let area = cross.len();
+        if area < 1e-7 {
+            continue;
+        }
+        let position = (a + b + c) * (1.0 / 3.0);
+        if position.y < 0.2 {
+            continue;
+        }
+        let radial = position.norm();
+        let mut normal = cross * (1.0 / area);
+        if normal.dot(radial) < 0.0 {
+            normal = normal * -1.0
+        }
+        if normal.dot(radial) < 0.8 {
+            continue;
+        }
+        let horizontal = (position.x * position.x + position.z * position.z).sqrt();
+        let score = area / (0.25 + horizontal);
         if score > best_score {
             best_score = score;
             best = Some(SurfacePoint { position, normal });
@@ -108,11 +161,16 @@ fn closest_point_on_triangle(p: Vec3, a: Vec3, b: Vec3, c: Vec3) -> Vec3 {
 pub fn closest_floor(
     mesh: &Mesh,
     query: Vec3,
-    previous_normal: Vec3,
+    previous: SurfacePoint,
+    profile: WalkProfile,
     max_distance: f32,
 ) -> Option<SurfacePoint> {
     let mut best = None;
     let mut best_d2 = max_distance * max_distance;
+    let gravity_up = match profile {
+        WalkProfile::Planar => Vec3::new(0.0, 1.0, 0.0),
+        WalkProfile::Round => query.norm(),
+    };
     for tri in mesh.vertices.chunks_exact(3) {
         let a = tri[0].pos;
         let b = tri[1].pos;
@@ -123,13 +181,16 @@ pub fn closest_floor(
             continue;
         }
         let mut normal = cross * (1.0 / length);
-        if normal.dot(previous_normal) < 0.0 {
+        if normal.dot(gravity_up) < 0.0 {
             normal = normal * -1.0;
         }
-        if normal.dot(previous_normal) < 0.45 {
+        if normal.dot(gravity_up) < 0.78 || normal.dot(previous.normal) < 0.7 {
             continue;
         }
         let position = closest_point_on_triangle(query, a, b, c);
+        if (position - previous.position).dot(gravity_up).abs() > 0.045 {
+            continue;
+        }
         let d2 = (position - query).dot(position - query);
         if d2 < best_d2 {
             best_d2 = d2;
@@ -138,20 +199,28 @@ pub fn closest_floor(
     }
     best
 }
-pub fn surface_placements(mesh: &Mesh, seed: u32) -> Vec<Placement> {
+pub fn surface_placements(mesh: &Mesh, seed: u32, kind: Surface) -> Vec<Placement> {
     let candidates: Vec<_> = mesh
         .vertices
         .chunks_exact(3)
         .step_by(7)
         .filter_map(|tri| {
             let center = (tri[0].pos + tri[1].pos + tri[2].pos) * (1.0 / 3.0);
+            let gravity_up = if matches!(kind, Surface::Lava) {
+                center.norm()
+            } else {
+                Vec3::new(0.0, 1.0, 0.0)
+            };
             let mut normal = (tri[1].pos - tri[0].pos)
                 .cross(tri[2].pos - tri[0].pos)
                 .norm();
-            if normal.dot(center) < 0.0 {
+            if normal.dot(gravity_up) < 0.0 {
                 normal = normal * -1.0;
             }
-            (center.len() > 0.28 && normal.dot(center.norm()) > 0.45).then_some((center, normal))
+            (center.len() > 0.25
+                && normal.dot(gravity_up) > 0.78
+                && (matches!(kind, Surface::Lava) || center.y > -0.4))
+                .then_some((center, normal))
         })
         .collect();
     let mut state = seed;
@@ -269,13 +338,13 @@ impl Ship {
 pub enum Mode {
     Space,
     Surface {
-        planet: usize,
+        target: SurfaceTarget,
         local: Vec3,
         normal: Vec3,
         yaw: f32,
     },
     Returning {
-        planet: usize,
+        target: SurfaceTarget,
         local: Vec3,
         normal: Vec3,
         yaw: f32,
@@ -308,7 +377,7 @@ mod tests {
                     color: [0; 3],
                 },
                 Vertex {
-                    pos: Vec3::new(1.0, 1.0, 0.0),
+                    pos: Vec3::new(1.0, 0.5, 0.0),
                     color: [0; 3],
                 },
                 Vertex {
@@ -319,12 +388,133 @@ mod tests {
         };
         let hit = super::closest_floor(
             &mesh,
-            Vec3::new(0.5, 0.55, 0.2),
-            Vec3::new(-0.7, 0.7, 0.0),
+            Vec3::new(0.5, 0.30, 0.2),
+            super::SurfacePoint {
+                position: Vec3::new(0.5, 0.25, 0.2),
+                normal: Vec3::new(-0.45, 0.9, 0.0),
+            },
+            super::WalkProfile::Planar,
             0.2,
         )
         .unwrap();
-        assert!((hit.position.y - 0.5).abs() < 0.04);
-        assert!(hit.normal.y > 0.6 && hit.normal.x < -0.6);
+        assert!((hit.position.y - 0.25).abs() < 0.04);
+        assert!(hit.normal.y > 0.8 && hit.normal.x < -0.4);
+    }
+    #[test]
+    fn steep_wall_is_not_walkable() {
+        let mesh = Mesh {
+            vertices: vec![
+                Vertex {
+                    pos: Vec3::new(0.0, 0.0, 0.0),
+                    color: [0; 3],
+                },
+                Vertex {
+                    pos: Vec3::new(0.0, 1.0, 0.0),
+                    color: [0; 3],
+                },
+                Vertex {
+                    pos: Vec3::new(0.0, 0.0, 1.0),
+                    color: [0; 3],
+                },
+            ],
+        };
+        let previous = super::SurfacePoint {
+            position: Vec3::new(0.01, 0.1, 0.1),
+            normal: Vec3::new(0.0, 1.0, 0.0),
+        };
+        assert!(
+            super::closest_floor(
+                &mesh,
+                previous.position,
+                previous,
+                super::WalkProfile::Planar,
+                0.2
+            )
+            .is_none()
+        );
+    }
+    #[test]
+    fn round_body_accepts_a_side_that_is_flat_to_local_gravity() {
+        let mesh = Mesh {
+            vertices: vec![
+                Vertex {
+                    pos: Vec3::new(1.0, 0.0, 0.0),
+                    color: [0; 3],
+                },
+                Vertex {
+                    pos: Vec3::new(1.0, 1.0, 0.0),
+                    color: [0; 3],
+                },
+                Vertex {
+                    pos: Vec3::new(1.0, 0.0, 1.0),
+                    color: [0; 3],
+                },
+            ],
+        };
+        let previous = super::SurfacePoint {
+            position: Vec3::new(1.0, 0.2, 0.2),
+            normal: Vec3::new(1.0, 0.0, 0.0),
+        };
+        let query = Vec3::new(1.03, 0.2, 0.2);
+        assert!(
+            super::closest_floor(&mesh, query, previous, super::WalkProfile::Round, 0.1).is_some()
+        );
+        assert!(
+            super::closest_floor(&mesh, query, previous, super::WalkProfile::Planar, 0.1).is_none()
+        );
+    }
+    #[test]
+    fn every_landing_has_a_walkable_neighbor() {
+        for planet in super::planets() {
+            let mesh = Mesh::load(planet.mesh).unwrap();
+            let start = super::landing_point(&mesh, planet.surface);
+            let profile = if matches!(planet.surface, super::Surface::Lava) {
+                super::WalkProfile::Round
+            } else {
+                super::WalkProfile::Planar
+            };
+            let forward = super::surface_forward(start.position, start.normal);
+            let side = forward.cross(start.normal).norm();
+            let directions = [forward, forward * -1.0, side, side * -1.0];
+            assert!(
+                directions.iter().any(|dir| {
+                    let mut current = start;
+                    for _ in 0..30 {
+                        let Some(next) = super::closest_floor(
+                            &mesh,
+                            current.position + *dir * 0.01,
+                            current,
+                            profile,
+                            0.07,
+                        ) else {
+                            return false;
+                        };
+                        if (next.position - current.position).len() < 0.001 {
+                            return false;
+                        }
+                        current = next;
+                    }
+                    true
+                }),
+                "{} has no useful walkable path",
+                planet.name
+            );
+        }
+        let mesh = Mesh::load("starship").unwrap();
+        let start = super::starship_landing(&mesh);
+        let forward = super::surface_forward(start.position, start.normal);
+        let mut current = start;
+        for _ in 0..30 {
+            let next = super::closest_floor(
+                &mesh,
+                current.position + forward * 0.01,
+                current,
+                super::WalkProfile::Round,
+                0.07,
+            )
+            .expect("Starship Mario has no useful walkable path");
+            assert!((next.position - current.position).len() > 0.001);
+            current = next;
+        }
     }
 }

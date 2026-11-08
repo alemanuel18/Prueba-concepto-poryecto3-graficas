@@ -1,7 +1,7 @@
 use crate::{
     asset::Mesh,
     math::Vec3,
-    scene::{self, Mode, Planet, Ship, SurfacePoint},
+    scene::{self, Mode, Planet, STARSHIP_SCALE, Ship, SurfacePoint, SurfaceTarget, WalkProfile},
 };
 use raylib::prelude::*;
 use std::collections::HashMap;
@@ -12,6 +12,7 @@ pub fn update(
     planets: &[Planet],
     meshes: &HashMap<&str, Mesh>,
     landings: &[SurfacePoint],
+    starship_landing: SurfacePoint,
     ship: &mut Ship,
     mode: &mut Mode,
 ) {
@@ -52,7 +53,7 @@ pub fn update(
                 * dt;
             for p in planets {
                 let delta = ship.pos - p.position(time);
-                let min = p.radius + 1.2;
+                let min = p.radius + STARSHIP_SCALE + 1.0;
                 if delta.len() < min {
                     ship.pos = p.position(time) + delta.norm() * min;
                     ship.speed = 0.0
@@ -65,7 +66,7 @@ pub fn update(
                 }) {
                     let landing = landings[i];
                     *mode = Mode::Surface {
-                        planet: i,
+                        target: SurfaceTarget::Planet(i),
                         local: landing.position + landing.normal * 0.015,
                         normal: landing.normal,
                         yaw: 0.0,
@@ -73,9 +74,19 @@ pub fn update(
                     ship.speed = 0.0
                 }
             }
+            if rl.is_key_pressed(KEY_F) {
+                *mode = Mode::Surface {
+                    target: SurfaceTarget::Starship,
+                    local: starship_landing.position + starship_landing.normal * 0.015,
+                    normal: starship_landing.normal,
+                    yaw: 0.0,
+                };
+                ship.speed = 0.0;
+                ship.camera_far = false;
+            }
         }
         Mode::Surface {
-            planet,
+            target,
             local,
             normal,
             yaw,
@@ -88,19 +99,33 @@ pub fn update(
             let f = north * yaw.cos() + side * yaw.sin();
             let step = (rl.is_key_down(KEY_W) as i32 - rl.is_key_down(KEY_S) as i32) as f32;
             let strafe = (rl.is_key_down(KEY_D) as i32 - rl.is_key_down(KEY_A) as i32) as f32;
-            let candidate = *local
-                + (f * step + f.cross(*normal).norm() * strafe)
-                    * dt
-                    * (3.5 / planets[*planet].radius);
-            if let Some(hit) =
-                scene::closest_floor(&meshes[planets[*planet].mesh], candidate, *normal, 0.09)
-            {
+            let (mesh, scale, profile) = match target {
+                SurfaceTarget::Planet(i) => (
+                    &meshes[planets[*i].mesh],
+                    planets[*i].radius,
+                    if matches!(planets[*i].surface, scene::Surface::Lava) {
+                        WalkProfile::Round
+                    } else {
+                        WalkProfile::Planar
+                    },
+                ),
+                SurfaceTarget::Starship => {
+                    (&meshes["starship"], STARSHIP_SCALE, WalkProfile::Round)
+                }
+            };
+            let candidate =
+                *local + (f * step + f.cross(*normal).norm() * strafe) * dt * (3.5 / scale);
+            let previous = SurfacePoint {
+                position: *local - *normal * 0.015,
+                normal: *normal,
+            };
+            if let Some(hit) = scene::closest_floor(mesh, candidate, previous, profile, 0.07) {
                 *normal = (*normal * 0.65 + hit.normal * 0.35).norm();
                 *local = hit.position + *normal * 0.015;
             }
             if rl.is_key_pressed(KEY_R) {
                 *mode = Mode::Returning {
-                    planet: *planet,
+                    target: *target,
                     local: *local,
                     normal: *normal,
                     yaw: *yaw,
@@ -109,7 +134,7 @@ pub fn update(
             }
         }
         Mode::Returning {
-            planet,
+            target,
             local,
             normal,
             remaining,
@@ -117,11 +142,13 @@ pub fn update(
         } => {
             *remaining -= dt;
             if *remaining <= 0.0 {
-                let p = planets[*planet].position(time);
-                let rotation = time * planets[*planet].spin;
-                let up = normal.rotate_y(rotation);
-                ship.pos = p + local.rotate_y(rotation) * planets[*planet].radius + up * 4.0;
-                ship.yaw = up.x.atan2(-up.z);
+                if let SurfaceTarget::Planet(i) = target {
+                    let p = planets[*i].position(time);
+                    let rotation = time * planets[*i].spin;
+                    let up = normal.rotate_y(rotation);
+                    ship.pos = p + local.rotate_y(rotation) * planets[*i].radius + up * 4.0;
+                    ship.yaw = up.x.atan2(-up.z);
+                }
                 ship.speed = 0.0;
                 *mode = Mode::Space;
             }
