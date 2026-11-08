@@ -7,7 +7,9 @@ use crate::{
 
 pub const HEIGHT: f32 = 0.8;
 pub const RADIUS: f32 = 0.14;
-const MODEL_SCALE: f32 = HEIGHT / 1.9;
+// Escala visual del modelo: más pequeño que HEIGHT para que Luigi
+// se vea como un personaje pequeño sobre la superficie del planeta.
+const MODEL_SCALE: f32 = HEIGHT / 5.5;
 
 pub struct Pose {
     pub ground: Vec3,
@@ -65,20 +67,20 @@ impl Pose {
     }
 
     pub fn camera(&self, mesh: &Mesh) -> Camera {
-        let s = self.scale;
-        // Camera up: for flat/planar planets use world Y (stable), for round use radial
+        // Camera up: para planetas planos usa Y global (cámara estable),
+        // para planetas esféricos/volcánicos usa la normal radial del suelo.
         let cam_up = if self.planar && !self.starship {
             Vec3::new(0.0, 1.0, 0.0)
         } else {
             self.up
         };
-        let aim = self.ground + self.up * (HEIGHT * 0.8 * s) + self.forward * (HEIGHT * 1.0 * s);
+        let aim = self.ground + self.up * (HEIGHT * 0.8) + self.forward * (HEIGHT * 1.0);
         let desired = if self.starship {
-            self.ground + self.up * (HEIGHT * 3.8 * s) - self.forward * (HEIGHT * 4.2 * s)
+            self.ground + self.up * (HEIGHT * 3.8) - self.forward * (HEIGHT * 4.2)
         } else {
-            self.ground + self.up * (HEIGHT * 2.6 * s) - self.forward * (HEIGHT * 5.0 * s)
+            self.ground + self.up * (HEIGHT * 2.6) - self.forward * (HEIGHT * 5.0)
         };
-        let start = self.ground + self.up * (HEIGHT * 0.9 * s);
+        let start = self.ground + self.up * (HEIGHT * 0.9);
         let a = self.localize(start);
         let b = self.localize(desired);
         let t = first_intersection(mesh, a, b)
