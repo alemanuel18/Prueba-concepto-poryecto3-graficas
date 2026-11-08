@@ -30,6 +30,12 @@ fn main() {
         "starship",
         "starship_low",
         "luigi",
+        // Decoraciones de Starship Mario
+        "ship_chimney",
+        "ship_rudder",
+        "ship_jet",
+        "ship_tree",
+        "ship_stump",
     ];
     let mut meshes: HashMap<&str, Mesh> = names
         .into_iter()
@@ -446,19 +452,78 @@ fn render_frame(
                 ..
             }
     ) {
+        let use_low = ship.camera_far && matches!(mode, Mode::Space);
         renderer.draw_mesh(
-            &meshes[if ship.camera_far && matches!(mode, Mode::Space) {
-                "starship_low"
-            } else {
-                "starship"
-            }],
+            &meshes[if use_low { "starship_low" } else { "starship" }],
             cam,
             ship.pos,
             STARSHIP_SCALE,
             ship.yaw,
             Shader::Ship,
             time,
-        )
+        );
+        // Decoraciones fijas de Starship Mario, posicionadas según el video de referencia.
+        // Cada entrada: (nombre_mesh, (x_norm, y_norm, z_norm), escala_relativa, rotacion_extra)
+        // Las coordenadas están en espacio normalizado del mesh principal ([-1,1]).
+        if !use_low {
+            let yaw = ship.yaw;
+            let cos_y = yaw.cos();
+            let sin_y = yaw.sin();
+            // Transforma un punto normalizado al espacio del mundo
+            let place = |nx: f32, ny: f32, nz: f32| -> Vec3 {
+                let wx = nx * cos_y + nz * sin_y;
+                let wz = -nx * sin_y + nz * cos_y;
+                ship.pos + Vec3::new(wx, ny, wz) * STARSHIP_SCALE
+            };
+            // up de la nave (siempre +Y rotado por yaw)
+            let up = Vec3::new(0.0, 1.0, 0.0);
+
+            // --- Timón (rudder): centro del deck, sobre el panel hexagonal ---
+            renderer.draw_mesh_oriented(
+                &meshes["ship_rudder"], cam,
+                place(0.0, 0.75, -0.04),
+                STARSHIP_SCALE * 0.08, yaw, up, Shader::Ship, time,
+            );
+
+            // --- Chimenea izquierda: zona trasera del deck ---
+            renderer.draw_mesh_oriented(
+                &meshes["ship_chimney"], cam,
+                place(-0.13, 0.69, 0.42),
+                STARSHIP_SCALE * 0.038, yaw, up, Shader::Ship, time,
+            );
+            // --- Chimenea derecha ---
+            renderer.draw_mesh_oriented(
+                &meshes["ship_chimney"], cam,
+                place(0.13, 0.69, 0.42),
+                STARSHIP_SCALE * 0.038, yaw, up, Shader::Ship, time,
+            );
+
+            // --- Árbol grande: costado derecho próxima a la cabeza ---
+            renderer.draw_mesh_oriented(
+                &meshes["ship_tree"], cam,
+                place(0.40, 0.60, -0.25),
+                STARSHIP_SCALE * 0.13, yaw + 0.8, up, Shader::Ship, time,
+            );
+            // --- Árbol mediano: costado izquierdo ---
+            renderer.draw_mesh_oriented(
+                &meshes["ship_tree"], cam,
+                place(-0.44, 0.58, 0.05),
+                STARSHIP_SCALE * 0.10, yaw - 0.5, up, Shader::Ship, time,
+            );
+
+            // --- Tronco (stump): zona central del deck ---
+            renderer.draw_mesh_oriented(
+                &meshes["ship_stump"], cam,
+                place(-0.20, 0.68, -0.12),
+                STARSHIP_SCALE * 0.055, yaw, up, Shader::Ship, time,
+            );
+
+            // --- Jet / propulsor: pequeño en la parte baja trasera ---
+            renderer.draw_mesh_oriented(
+                &meshes["ship_jet"], cam,
+                place(0.0, -0.20, 0.72),
+                STARSHIP_SCALE * 0.055, yaw, up, Shader::Ship, time,
+            );        }
     }
     if let Some((_, pose)) = &surface {
         pose.draw(renderer, &meshes["luigi"], cam, time);

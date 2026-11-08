@@ -32,6 +32,12 @@ SPECS = [
     ('geyser', 'Common Map Objects - Lava Geyser.zip', 'Lava Geyser/LavaGeyser.dae'),
     ('crate', 'Common Map Objects - Strong Block.zip', 'Strong Block/StrongBlock.dae'),
     ('falling_crate', 'Common Map Objects - Falling Crate.zip', 'Falling Crate/GravityFallBlock.dae'),
+    # Decoraciones de Starship Mario
+    ('ship_chimney', 'Starship Mario Exterior.zip', 'Starship Mario Outside/MarioFaceShipChimney.dae'),
+    ('ship_rudder',  'Starship Mario Exterior.zip', 'Starship Mario Outside/MarioFaceShipRudder.dae'),
+    ('ship_jet',     'Starship Mario Exterior.zip', 'Starship Mario Outside/MarioFaceShipJet.dae'),
+    ('ship_tree',    'Starship Mario Exterior.zip', 'Starship Mario Outside/PoleTreeB.dae'),
+    ('ship_stump',   'Starship Mario Exterior.zip', 'Starship Mario Outside/StumpObj.dae'),
 ]
 
 def export_luigi():
