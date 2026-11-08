@@ -32,3 +32,8 @@
 - `README.md` documenta controles, módulos, recursos y límites. `media/galaxy-tour.mp4` dura 29 segundos y muestra vuelo, planetas, Luigi y cubierta de la nave.
 - El trabajo está en commits separados para importación de Luigi (`c9ea334`), navegación/cámara/colisiones (`3b93644`) y documentación/video generado (`80ef950`). No hay remoto Git ni nombres de integrantes confirmados; no inventarlos.
 - Para cambios futuros, actualizar este archivo y el README con el comportamiento real; regenerar el video de demostración si cambia la escena. Mantener los seis MP4 de referencia fuera de Git.
+
+## Correcciones recientes (2026-11-08)
+- **Cámara en planetas planos estabilizada**: `Pose` ahora recibe el `WalkProfile`. Cuando el perfil es `Planar` (Yoshi, Fluffy, Freezeflame, Throwback), la cámara usa `Vec3::new(0,1,0)` como up en lugar de la normal del triángulo; esto evita el roll/giro caótico al caminar sobre geometría angular. Para perfiles `Round`/`Volcanic` (Starship, Volcano Sandwich) se sigue usando la normal radial, igual que en Mario Galaxy.
+- **Distancia de cámara proporcional al planeta**: Los offsets de posición y mira de la cámara en `Pose::camera()` ahora se multiplican por `self.scale` (el radio del planeta, 10–13). Esto hace que la cámara se aleje lo suficiente para que Luigi no parezca un gigante y el planeta se vea a la escala correcta.
+- Ambos cambios se verificaron con `cargo check --offline` y `cargo test --offline` (7/7 tests ✅).

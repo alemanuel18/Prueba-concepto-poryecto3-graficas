@@ -282,7 +282,19 @@ fn render_frame(
             ..
         } => Some((
             target,
-            avatar::Pose::new(target, local, normal, yaw, planets, ship, time),
+            {
+                let profile = match target {
+                    SurfaceTarget::Planet(i) => {
+                        if matches!(planets[i].surface, scene::Surface::Lava) {
+                            scene::WalkProfile::Volcanic
+                        } else {
+                            scene::WalkProfile::Planar
+                        }
+                    }
+                    SurfaceTarget::Starship => scene::WalkProfile::Round,
+                };
+                avatar::Pose::new(target, local, normal, yaw, planets, ship, time, profile)
+            },
         )),
         Mode::Space => None,
     };
