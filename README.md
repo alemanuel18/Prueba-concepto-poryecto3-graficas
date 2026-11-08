@@ -1,10 +1,10 @@
 # Space Travel — Galaxy Tour
 
-Simulación explorable de un sistema solar inspirado en los pequeños mundos de **Super Mario Galaxy**. Cinco planetas giran sobre su eje y orbitan un sol en el plano eclíptico. La **Starship Mario** permite volar entre ellos, acercarse sin cambiar de escena y usar anillos estelares para observar su superficie. Su cubierta también se puede explorar. Es una demostración gráfica: no hay vidas, daño ni objetivos de juego.
+Simulación explorable de un sistema solar inspirado en los pequeños mundos de **Super Mario Galaxy**. Cinco planetas giran sobre su eje y orbitan un sol en el plano eclíptico. La **Starship Mario** permite volar entre ellos, acercarse sin cambiar de escena y usar anillos estelares para observar su superficie. En los planetas y en la cubierta de la nave se controla a **Luigi**, con un modelo estático y una cámara de seguimiento. Es una demostración gráfica: no hay vidas, daño ni objetivos de juego.
 
 [![Vista del recorrido](media/preview.png)](media/galaxy-tour.mp4)
 
-**[Ver el video de demostración (MP4, 29 s)](media/galaxy-tour.mp4).** Muestra vuelo, acercamiento, vuelta alrededor, vista de superficie y alejamiento en cada planeta, además de la cubierta de Starship Mario. El recorrido se generó con la opción `--render-video` del mismo renderer.
+**[Ver el video de demostración (MP4, 29 s)](media/galaxy-tour.mp4).** Muestra vuelo, acercamiento, vuelta alrededor, a Luigi en las superficies y alejamiento en cada planeta, además de la cubierta de Starship Mario. El recorrido se generó con la opción `--render-video` del mismo renderer.
 
 ## Ejecutar
 
@@ -22,7 +22,7 @@ La ventana inicia cerca de Yoshi Star. En equipos lentos, reducir `W` y `H` en `
 | --- | --- | --- |
 | `W` / `S` | Acelerar / retroceder | Caminar adelante / atrás por el piso transitable |
 | `A` / `D` | Desplazamiento lateral | Caminar lateralmente por el piso transitable |
-| `←` / `→` | Girar la nave | Girar la vista |
+| `←` / `→` | Girar la nave | Girar a Luigi y la cámara |
 | `Espacio` / `Ctrl izquierdo` | Subir / bajar | — |
 | `Shift izquierdo` | Impulso rápido | — |
 | `C` | Alternar cámara cercana/lejana y nave grande/mini | — |
@@ -44,21 +44,22 @@ La ventana inicia cerca de Yoshi Star. En equipos lentos, reducir `W` y `H` en `
 | Volcano Sandwich | Relieve volcánico y géiseres | Lava animada y cielo rojizo |
 | Throwback Fortress | Fortaleza, bloques y cajas | Reflejos metálicos y cielo del observatorio |
 
-Los planetas se dibujan **solo con sus modelos originales**, sin esferas añadidas. Fluffy Bluff y las versiones mini de Fluffy Bluff y Throwback Fortress tienen una corrección de orientación al importar. El conversor también recupera materiales asignados directamente a primitivas DAE, incluidos los colores de la cubierta verde de Fluffy Bluff. Los objetos pequeños se distribuyen de forma determinista sobre triángulos transitables de esas mallas y se orientan según la normal local. La posición de la distribución gira con cada planeta.
+Los planetas se dibujan **solo con sus modelos originales**, sin esferas añadidas. Fluffy Bluff y las versiones mini de Fluffy Bluff y Throwback Fortress tienen una corrección de orientación al importar. El conversor también recupera materiales asignados directamente a primitivas DAE, incluidos los colores de la cubierta verde de Fluffy Bluff. El modelo de Luigi se convierte desde el OBJ y las texturas del ZIP original. Los objetos pequeños se distribuyen de forma determinista sobre triángulos transitables de esas mallas y se orientan según la normal local. La posición de la distribución gira con cada planeta.
 
 ## Implementación
 
 - `src/renderer.rs`: transformación de vértices, cámara, proyección en perspectiva, rasterización de triángulos, interpolación de color con corrección de perspectiva, z-buffer y shaders de fragmento en CPU. Raylib solo abre la ventana, recibe teclas, presenta el framebuffer y dibuja el HUD 2D.
 - `src/math.rs`: vectores y operaciones geométricas.
 - `src/asset.rs`: lector del formato de malla compacto y geometría procedural del sol.
+- `src/avatar.rs`: escala, orientación y dibujo de Luigi; cámara de seguimiento y detección de obstrucciones entre cámara y personaje.
 - `src/scene.rs`: parámetros de órbita y rotación, selección de piso y búsqueda del punto más cercano sobre los triángulos del modelo.
-- `src/controls.rs`: aceleración dependiente de `dt`, giro, desplazamiento, viajes rápidos y movimiento sobre el piso real de cada planeta.
+- `src/controls.rs`: aceleración dependiente de `dt`, giro, desplazamiento, viajes rápidos y movimiento de Luigi sobre el piso real de cada planeta.
 - `src/main.rs`: composición de la escena, fondos por planeta, niveles de detalle y generación del video.
 - `tools/convert_assets.py`: conversión opcional de los ZIP originales DAE/PNG a las mallas y cielos ya incluidos. Requiere Python, Pillow y lxml; los ZIP originales proporcionados para el proyecto deben estar en `assets/` para volver a ejecutar la conversión.
 
 Cada planeta mantiene su tamaño fijo: sus radios visuales están entre 10 y 13 unidades y sus órbitas entre 55 y 298 unidades. Se ve mayor al acercarse **solo por perspectiva**. El renderizador elige las versiones mini de cuatro planetas cuando están lejos; Volcano Sandwich reutiliza su malla. La cámara lejana usa la versión mini de Starship Mario y la cercana usa el modelo grande. En vuelo espacial siempre se muestra el mismo campo estelar. Al usar un anillo aparece el fondo propio del planeta, compuesto con las texturas originales sin deformar su proporción y respetando su transparencia.
 
-La exploración de superficie parte de un triángulo de piso del modelo. Cada paso busca un triángulo cercano cuya pendiente sea transitable (normal alineada al menos 0.78 con la vertical local), cuya altura continúe la del paso anterior y cuya normal no cambie bruscamente. Así, el movimiento se detiene ante paredes, bordes y cortes del relieve. En Yoshi Star, Fluffy Bluff, Freezeflame Ice y Throwback Fortress se camina por zonas relativamente horizontales; Volcano Sandwich y la cubierta redondeada de Starship Mario usan una vertical radial local. En el volcán, los triángulos rojos y calientes se excluyen del piso y de la colocación de objetos. La altura y la normal de la cámara siguen el piso real. Es una selección geométrica de superficies, no un sistema de plataformas o misiones del juego original. El contador de triángulos aparece abajo a la izquierda para comparar el trabajo cercano y lejano. También se descartan modelos situados detrás de la cámara o más allá del límite del sistema. Los shaders CPU del sol, agua, hielo, lava, metal y anillos usan cálculos diferentes; los del sol, agua, lava y anillo cambian con el tiempo.
+Cada zona comienza en una entrada elegida sobre el modelo a partir de los videos de referencia: pradera de Yoshi Star, jardín de Fluffy Bluff, base de la montaña helada, roca de Volcano Sandwich, área verde de Throwback y cubierta de Starship Mario. La exploración parte de un triángulo de piso. Cada paso se divide en tramos cortos y exige un triángulo cercano cuya pendiente sea transitable (normal alineada al menos 0.78 con la vertical local), altura continua y normal sin cambios bruscos. El radio de los pies de Luigi debe seguir apoyado en piso; su cuerpo también se detiene ante paredes y objetos sólidos. En Yoshi Star, Fluffy Bluff, Freezeflame Ice y Throwback Fortress se camina por zonas relativamente horizontales; Volcano Sandwich y la cubierta redondeada de Starship Mario usan una vertical radial local. En el volcán, los triángulos rojos y calientes se excluyen del piso y de la colocación de objetos. La cámara sigue a Luigi y se acerca si el modelo bloquea la vista. No hay animación del personaje ni un sistema de plataformas o misiones del juego original. El contador de triángulos aparece abajo a la izquierda para comparar el trabajo cercano y lejano. También se descartan modelos situados detrás de la cámara o más allá del límite del sistema. Los shaders CPU del sol, agua, hielo, lava, metal y anillos usan cálculos diferentes; los del sol, agua, lava y anillo cambian con el tiempo.
 
 Opciones para reproducir material de la entrega:
 
@@ -73,7 +74,7 @@ Las capturas se guardan en `/tmp/space_travel.ppm`; el video se guarda en `media
 
 ## Recursos, autoría y alcance
 
-El pipeline de software fue creado para este proyecto. Los modelos de Starship Mario, planetas, anillo, objetos y fondos provienen de los archivos de **Super Mario Galaxy / Super Mario Galaxy 2** proporcionados en `assets/` al iniciar el trabajo; los derechos de esos diseños pertenecen a sus autores y a Nintendo. Se transformaron para uso académico en mallas compactas con colores muestreados de sus texturas. No se incluyen los ZIP originales, grandes y opcionales; sí se incluyen todos los recursos que necesita el ejecutable. Se utilizó asistencia de IA para implementar y documentar el proyecto.
+El pipeline de software fue creado para este proyecto. Los modelos de Starship Mario, Luigi, planetas, anillo, objetos y fondos provienen de los archivos de **Super Mario Galaxy / Super Mario Galaxy 2** proporcionados en `assets/` al iniciar el trabajo; los derechos de esos diseños pertenecen a sus autores y a Nintendo. Se transformaron para uso académico en mallas compactas con colores muestreados de sus texturas. No se incluyen los ZIP originales ni los seis videos de referencia que el usuario colocó en la raíz; están ignorados por Git. Sí se incluyen todos los recursos que necesita el ejecutable y el video generado para esta demostración. Se utilizó asistencia de IA para implementar y documentar el proyecto.
 
 **Integrantes y contribuciones:** completar con los nombres reales antes de entregar. El historial de commits separa el renderer, cada planeta y la navegación de superficie.
 
