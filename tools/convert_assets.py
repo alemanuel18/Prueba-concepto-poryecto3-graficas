@@ -19,7 +19,6 @@ SPECS = [
     ('yoshi', 'Yoshi Star Starting Planet.zip', 'Start Planet/YoshiCaughtPlanet.dae'),
     ('fluffy', 'Fluffy Bluff Valley Planet.zip', 'CloudAcrossValleyPlanet.dae'),
     ('ice', 'Freezeflame Mountain Planet.zip', 'Mountain Planet/IceMountainPlanet.dae'),
-    ('lava', 'Freezeflame Volcano Sandwich Planet.zip', 'Volcano Sandwich Planet/SandwitchVolcanoPlanet.dae'),
     ('fortress', 'World 6 Galaxies - Throwback Galaxy.zip', 'Throwback Galaxy/OldFortressPlanet.dae'),
     ('yoshi_low', 'Mini Yoshi Star Galaxy.zip', 'MiniYosshiHomeGalaxy.dae'),
     ('fluffy_low', 'Mini Fluffy Buff Galaxy.zip', 'MiniMokumokuValleyGalaxy.dae'),
@@ -29,7 +28,6 @@ SPECS = [
     ('flower', 'Common Map Objects - Flowers.zip', 'Flowers/Flower.dae'),
     ('pipe', 'Common Map Objects - Warp Pipe.zip', 'Warp Pipe/EarthenPipe.dae'),
     ('fountain', 'Common Map Objects - Water Fountain.zip', 'Water Fountain/FountainBig.dae'),
-    ('geyser', 'Common Map Objects - Lava Geyser.zip', 'Lava Geyser/LavaGeyser.dae'),
     ('crate', 'Common Map Objects - Strong Block.zip', 'Strong Block/StrongBlock.dae'),
     ('falling_crate', 'Common Map Objects - Falling Crate.zip', 'Falling Crate/GravityFallBlock.dae'),
     # Decoraciones de Starship Mario
@@ -103,7 +101,6 @@ SKIES = [
     ('yoshi_surface', 'Skyboxes - Galaxy Sky.zip', 'GalaxySkyGalaxy.png'),
     ('fluffy_surface', 'Skyboxes - Cloudy Sky.zip', 'PlanetCloud03.png'),
     ('ice_surface', 'Skyboxes - Aurora Sky.zip', 'AuroraB.png'),
-    ('lava_surface', 'Skyboxes - Melty Molten Sky.zip', 'LavaSun.png'),
     ('fortress_surface', 'Skyboxes - Comet Observatory Dome Skies.zip', 'AstroDomeGalaxy.png'),
 ]
 
