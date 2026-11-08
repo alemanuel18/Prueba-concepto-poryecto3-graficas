@@ -104,7 +104,7 @@ pub fn update(
                     &meshes[planets[*i].mesh],
                     planets[*i].radius,
                     if matches!(planets[*i].surface, scene::Surface::Lava) {
-                        WalkProfile::Round
+                        WalkProfile::Volcanic
                     } else {
                         WalkProfile::Planar
                     },

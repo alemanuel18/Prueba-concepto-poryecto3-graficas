@@ -19,6 +19,17 @@ pub enum SurfaceTarget {
 pub enum WalkProfile {
     Planar,
     Round,
+    Volcanic,
+}
+
+fn is_hot_lava(tri: &[crate::asset::Vertex]) -> bool {
+    let [r, g, b] = [0, 1, 2].map(|channel| {
+        tri.iter()
+            .map(|vertex| vertex.color[channel] as f32)
+            .sum::<f32>()
+            / 3.0
+    });
+    r > 90.0 && r > g * 1.35 && r > b * 1.25
 }
 
 pub const STARSHIP_SCALE: f32 = 3.5;
@@ -49,13 +60,25 @@ pub fn landing_point(mesh: &Mesh, kind: Surface) -> SurfacePoint {
         if area < 1e-7 {
             continue;
         }
-        let mut normal = cross * (1.0 / area);
-        if normal.y < 0.0 {
-            normal = normal * -1.0;
-        }
         let position = (a + b + c) * (1.0 / 3.0);
-        if normal.y < 0.65 || position.y < -0.4 {
+        if matches!(kind, Surface::Lava) && is_hot_lava(tri) {
             continue;
+        }
+        let mut normal = cross * (1.0 / area);
+        if matches!(kind, Surface::Lava) {
+            if normal.dot(position) < 0.0 {
+                normal = normal * -1.0;
+            }
+            if normal.dot(position.norm()) < 0.82 || !(-0.1..=0.45).contains(&position.y) {
+                continue;
+            }
+        } else {
+            if normal.y < 0.0 {
+                normal = normal * -1.0;
+            }
+            if normal.y < 0.65 || position.y < -0.4 {
+                continue;
+            }
         }
         let horizontal = (position.x * position.x + position.z * position.z).sqrt();
         let score = if matches!(kind, Surface::Grass) {
@@ -71,6 +94,8 @@ pub fn landing_point(mesh: &Mesh, kind: Surface) -> SurfacePoint {
                 continue;
             }
             area.sqrt() * (0.5 + 3.0 * position.y) * (0.5 + horizontal)
+        } else if matches!(kind, Surface::Lava) {
+            area * (1.0 - position.y.abs() * 0.4)
         } else {
             area / (0.3 + horizontal) * (0.8 + position.y.max(0.0))
         };
@@ -169,9 +194,12 @@ pub fn closest_floor(
     let mut best_d2 = max_distance * max_distance;
     let gravity_up = match profile {
         WalkProfile::Planar => Vec3::new(0.0, 1.0, 0.0),
-        WalkProfile::Round => query.norm(),
+        WalkProfile::Round | WalkProfile::Volcanic => query.norm(),
     };
     for tri in mesh.vertices.chunks_exact(3) {
+        if matches!(profile, WalkProfile::Volcanic) && is_hot_lava(tri) {
+            continue;
+        }
         let a = tri[0].pos;
         let b = tri[1].pos;
         let c = tri[2].pos;
@@ -205,6 +233,9 @@ pub fn surface_placements(mesh: &Mesh, seed: u32, kind: Surface) -> Vec<Placemen
         .chunks_exact(3)
         .step_by(7)
         .filter_map(|tri| {
+            if matches!(kind, Surface::Lava) && is_hot_lava(tri) {
+                return None;
+            }
             let center = (tri[0].pos + tri[1].pos + tri[2].pos) * (1.0 / 3.0);
             let gravity_up = if matches!(kind, Surface::Lava) {
                 center.norm()
@@ -464,12 +495,43 @@ mod tests {
         );
     }
     #[test]
+    fn volcanic_floor_excludes_lava_but_keeps_cold_stone() {
+        let mut mesh = Mesh {
+            vertices: [
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(1.0, 1.0, 0.0),
+                Vec3::new(1.0, 0.0, 1.0),
+            ]
+            .map(|pos| Vertex {
+                pos,
+                color: [220, 30, 10],
+            })
+            .to_vec(),
+        };
+        let previous = super::SurfacePoint {
+            position: Vec3::new(1.0, 0.2, 0.2),
+            normal: Vec3::new(1.0, 0.0, 0.0),
+        };
+        let query = Vec3::new(1.03, 0.2, 0.2);
+        assert!(
+            super::closest_floor(&mesh, query, previous, super::WalkProfile::Volcanic, 0.1)
+                .is_none()
+        );
+        for vertex in &mut mesh.vertices {
+            vertex.color = [130, 125, 115];
+        }
+        assert!(
+            super::closest_floor(&mesh, query, previous, super::WalkProfile::Volcanic, 0.1)
+                .is_some()
+        );
+    }
+    #[test]
     fn every_landing_has_a_walkable_neighbor() {
         for planet in super::planets() {
             let mesh = Mesh::load(planet.mesh).unwrap();
             let start = super::landing_point(&mesh, planet.surface);
             let profile = if matches!(planet.surface, super::Surface::Lava) {
-                super::WalkProfile::Round
+                super::WalkProfile::Volcanic
             } else {
                 super::WalkProfile::Planar
             };

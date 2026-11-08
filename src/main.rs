@@ -531,7 +531,7 @@ fn render_video(
             let center = p.position(time);
             let (ship, mode) = if u >= 0.55 && u < 0.78 {
                 let profile = if matches!(p.surface, Surface::Lava) {
-                    scene::WalkProfile::Round
+                    scene::WalkProfile::Volcanic
                 } else {
                     scene::WalkProfile::Planar
                 };
