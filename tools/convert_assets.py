@@ -120,7 +120,7 @@ def main():
                         for count in [int(x) for x in tag(prim,'vcount').text.split()]:
                             poly=verts[cursor:cursor+count];cursor+=count
                             faces.extend([[poly[0],poly[j],poly[j+1]] for j in range(1,count-1)])
-                    img=material_image(mat_bind.get(prim.get('material'),'') )
+                    img=material_image(mat_bind.get(prim.get('material'),prim.get('material','')))
                     for face in faces:
                         tri=[]
                         for v in face:
