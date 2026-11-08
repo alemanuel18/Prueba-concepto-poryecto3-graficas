@@ -1,10 +1,10 @@
 # Space Travel — Galaxy Tour
 
-Simulación explorable de un sistema solar inspirado en los pequeños mundos de **Super Mario Galaxy**. Cinco planetas giran sobre su eje y orbitan un sol en el plano eclíptico. La **Starship Mario** permite volar entre ellos, acercarse sin cambiar de escena y usar anillos estelares para observar su superficie. Es una demostración gráfica: no hay vidas, daño ni objetivos de juego.
+Simulación explorable de un sistema solar inspirado en los pequeños mundos de **Super Mario Galaxy**. Cinco planetas giran sobre su eje y orbitan un sol en el plano eclíptico. La **Starship Mario** permite volar entre ellos, acercarse sin cambiar de escena y usar anillos estelares para observar su superficie. Su cubierta también se puede explorar. Es una demostración gráfica: no hay vidas, daño ni objetivos de juego.
 
 [![Vista del recorrido](media/preview.png)](media/galaxy-tour.mp4)
 
-**[Ver el video de demostración (MP4, 25 s)](media/galaxy-tour.mp4).** Muestra vuelo, acercamiento, vuelta alrededor, vista de superficie y alejamiento en cada planeta. El recorrido se generó con la opción `--render-video` del mismo renderer.
+**[Ver el video de demostración (MP4, 29 s)](media/galaxy-tour.mp4).** Muestra vuelo, acercamiento, vuelta alrededor, vista de superficie y alejamiento en cada planeta, además de la cubierta de Starship Mario. El recorrido se generó con la opción `--render-video` del mismo renderer.
 
 ## Ejecutar
 
@@ -20,18 +20,19 @@ La ventana inicia cerca de Yoshi Star. En equipos lentos, reducir `W` y `H` en `
 
 | Tecla | Vuelo espacial | Cerca de la superficie |
 | --- | --- | --- |
-| `W` / `S` | Acelerar / retroceder | Caminar adelante / atrás sobre la malla |
-| `A` / `D` | Desplazamiento lateral | Caminar lateralmente sobre la malla |
+| `W` / `S` | Acelerar / retroceder | Caminar adelante / atrás por el piso transitable |
+| `A` / `D` | Desplazamiento lateral | Caminar lateralmente por el piso transitable |
 | `←` / `→` | Girar la nave | Girar la vista |
 | `Espacio` / `Ctrl izquierdo` | Subir / bajar | — |
 | `Shift izquierdo` | Impulso rápido | — |
 | `C` | Alternar cámara cercana/lejana y nave grande/mini | — |
 | `1`–`5` | Viajar cerca de un planeta | Volver al vuelo cerca del planeta elegido |
 | `E` | Usar el anillo estelar cuando esté cerca | — |
+| `F` | Explorar la cubierta de Starship Mario | — |
 | `R` | — | Invocar un anillo y regresar a la nave |
 | `Esc` | Salir | Salir |
 
-`1`–`5` seleccionan Yoshi Star, Fluffy Bluff, Freezeflame Ice, Volcano Sandwich y Throwback Fortress. El anillo está en el lado positivo del eje X de cada planeta; tras viajar con un número, la nave aparece lo bastante cerca para usar `E`. Durante el regreso, el anillo invocado aparece antes de transportar la cámara a la nave. Las órbitas siguen avanzando en todo momento.
+`1`–`5` seleccionan Yoshi Star, Fluffy Bluff, Freezeflame Ice, Volcano Sandwich y Throwback Fortress. El anillo está en el lado positivo del eje X de cada planeta; tras viajar con un número, la nave aparece lo bastante cerca para usar `E`. Durante el regreso, el anillo invocado aparece antes de transportar la cámara a la nave. En la cubierta, `R` devuelve al vuelo espacial. Las órbitas siguen avanzando en todo momento.
 
 ## Planetas
 
@@ -43,7 +44,7 @@ La ventana inicia cerca de Yoshi Star. En equipos lentos, reducir `W` y `H` en `
 | Volcano Sandwich | Relieve volcánico y géiseres | Lava animada y cielo rojizo |
 | Throwback Fortress | Fortaleza, bloques y cajas | Reflejos metálicos y cielo del observatorio |
 
-Los planetas se dibujan **solo con sus modelos originales**, sin esferas añadidas. Fluffy Bluff y las versiones mini de Fluffy Bluff y Throwback Fortress tienen una corrección de orientación al importar. Los objetos pequeños se distribuyen de forma determinista sobre triángulos de esas mallas y se orientan según la normal local. La posición de la distribución gira con cada planeta.
+Los planetas se dibujan **solo con sus modelos originales**, sin esferas añadidas. Fluffy Bluff y las versiones mini de Fluffy Bluff y Throwback Fortress tienen una corrección de orientación al importar. El conversor también recupera materiales asignados directamente a primitivas DAE, incluidos los colores de la cubierta verde de Fluffy Bluff. Los objetos pequeños se distribuyen de forma determinista sobre triángulos transitables de esas mallas y se orientan según la normal local. La posición de la distribución gira con cada planeta.
 
 ## Implementación
 
@@ -57,13 +58,14 @@ Los planetas se dibujan **solo con sus modelos originales**, sin esferas añadid
 
 Cada planeta mantiene su tamaño fijo: sus radios visuales están entre 10 y 13 unidades y sus órbitas entre 55 y 298 unidades. Se ve mayor al acercarse **solo por perspectiva**. El renderizador elige las versiones mini de cuatro planetas cuando están lejos; Volcano Sandwich reutiliza su malla. La cámara lejana usa la versión mini de Starship Mario y la cercana usa el modelo grande. En vuelo espacial siempre se muestra el mismo campo estelar. Al usar un anillo aparece el fondo propio del planeta, compuesto con las texturas originales sin deformar su proporción y respetando su transparencia.
 
-La exploración de superficie parte de un triángulo de piso del modelo. Cada paso busca el punto más próximo en la malla; la altura y la normal de la cámara siguen ese piso, en vez de imponer un radio esférico. El contador de triángulos aparece abajo a la izquierda para comparar el trabajo cercano y lejano. También se descartan modelos situados detrás de la cámara o más allá del límite del sistema. Los shaders CPU del sol, agua, hielo, lava, metal y anillos usan cálculos diferentes; los del sol, agua, lava y anillo cambian con el tiempo.
+La exploración de superficie parte de un triángulo de piso del modelo. Cada paso busca un triángulo cercano cuya pendiente sea transitable (normal alineada al menos 0.78 con la vertical local), cuya altura continúe la del paso anterior y cuya normal no cambie bruscamente. Así, el movimiento se detiene ante paredes, bordes y cortes del relieve. En Yoshi Star, Fluffy Bluff, Freezeflame Ice y Throwback Fortress se camina por zonas relativamente horizontales; Volcano Sandwich y la cubierta redondeada de Starship Mario usan una vertical radial local. La altura y la normal de la cámara siguen el piso real. Es una selección geométrica de superficies, no un sistema de plataformas o misiones del juego original. El contador de triángulos aparece abajo a la izquierda para comparar el trabajo cercano y lejano. También se descartan modelos situados detrás de la cámara o más allá del límite del sistema. Los shaders CPU del sol, agua, hielo, lava, metal y anillos usan cálculos diferentes; los del sol, agua, lava y anillo cambian con el tiempo.
 
 Opciones para reproducir material de la entrega:
 
 ```bash
 cargo run --release -- --snapshot
 cargo run --release -- --snapshot-surface
+cargo run --release -- --snapshot-ship
 cargo run --release -- --render-video
 ```
 
